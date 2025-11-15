@@ -1,0 +1,3 @@
+endpoint = "https://proxmox.susano-lab.duckdns.org"
+username = "terraform@pam"
+password = "password"

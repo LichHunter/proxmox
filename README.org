@@ -1,0 +1,79 @@
+#+title: Readme
+
+* Firewall
+** Manual Installation Procedure
+The OS must be manually installed to the virtual hard disk. This is a one-time operation.
+
+1. After applying the Terraform configuration, start the VM and open the Proxmox console.
+2. The VM will boot into a live environment from the ISO. It will prompt for interface assignment and then show a =Login:= prompt.
+3. To start the installation, log in with the following credentials:
+   - *Username:* =installer=
+   - *Password:* =opnsense=
+4. Follow the on-screen installation wizard. Select =Install (UFS)=, choose the virtual disk (=da0=), and confirm that you want to erase the disk.
+5. Once the installation is complete, reboot the system from the wizard.
+6. **Crucially, update your IaC to reflect the new state.** Modify the =proxmox_virtual_environment_vm= resource:
+   - Change the boot order to prioritize the hard disk: =boot_order = ["scsi0"]=
+   - Comment out or remove the entire =cdrom= block. The ISO is no longer needed.
+7. Run =terraform apply= to persist these changes. The VM is now permanently installed.
+
+** OPNsense Network and DNS Configuration
+*** Initial Console Configuration (Post-Installation)
+After the first boot from the hard disk, you must perform the initial setup via the console.
+
+1.  *Assign Interfaces:* Choose option =1) Assign interfaces=. Match the MAC addresses shown to the hardware in the Proxmox UI to correctly identify which virtual NIC (=vtnet0= or =vtnet1=) corresponds to your WAN (=vmbr0=) and LAN (=vmbr1=).
+2.  *Set LAN IP Address:* Choose option =2) Set interface IP address=. Select the LAN interface and configure it with a static IP address for your new protected network (e.g., =192.168.100.1/24=). Do not set an upstream gateway for the LAN.
+
+*** Dnsmasq Configuration for DNS and DHCP
+For simple, integrated DNS and DHCP, Dnsmasq is the correct tool.
+
+1.  *Disable Conflicting Services:* To ensure a clean state, navigate to =Services -> Unbound DNS= and =Services -> ISC DHCPv4= and ensure both are disabled.
+2.  *Enable Dnsmasq:* Navigate to =Services -> Dnsmasq DNS & DHCP -> General=.
+    - Check the =Enable= box.
+    - Set =Interface= to =LAN=.
+3.  *Set the DNS Listen Port:*
+    - In the =DNS= section, set =Listen port= to =53=.
+      #+BEGIN_NOTE
+      A value of =0= is supposed to default to 53, but was identified as the root cause of a critical failure where the DNS service would not start. Setting it explicitly to =53= is mandatory.
+      #+END_NOTE
+4.  *Configure DHCP Range:*
+    - Go to the =DHCP ranges= tab.
+    - Add a new range for the =LAN= interface (e.g., from =192.168.100.100= to =192.168.100.200=).
+5.  *Set the Domain:*
+    - Go back to the =General= tab.
+    - Scroll down and set the =DHCP default domain= to your desired internal domain (e.g., =lab.lan=).
+6.  *Apply Changes:* Click the =Apply= button. Your protected LAN now has fully functional DHCP and automatically registered DNS for its clients.
+
+** Part 3: Post-Mortem: Troubleshooting DNS Resolution Failure
+*** Synopsis
+After a seemingly correct configuration, clients on the protected LAN could obtain DHCP leases but could not resolve external domain names (e.g., =ping google.com= failed). However, pinging external IP addresses (=ping 8.8.8.8=) worked. This indicated a DNS-specific failure.
+
+*** Diagnostic Path and False Leads
+The methodical process of elimination is key.
+
+1.  *Routing vs. DNS:* The success of =ping 8.8.8.8= proved that Layer 3 routing, NAT, and the basic LAN firewall "allow" rule were all functioning correctly. The problem was isolated to Layer 7 (DNS).
+2.  *Firewall DNS Capability:* A test using =Interfaces -> Diagnostics -> DNS Lookup= for =google.com= succeeded. This proved the OPNsense box itself could reach its upstream DNS servers, invalidating the theory that the firewall was blocking its own outbound traffic.
+3.  *Packet Arrival Verification:* The critical test involved using =tcpdump= on the Proxmox host to monitor the =vmbr1= interface.
+    #+BEGIN_SRC shell
+      tcpdump -i vmbr1 -n -e 'src host 192.168.100.192 and dst host 192.168.100.1 and udp port 53'
+    #+END_SRC
+    This test produced output, proving conclusively that the client's DNS query packet was successfully crossing the virtual network and arriving at the OPNsense VM's network interface. This invalidated theories related to Proxmox-level filtering.
+4.  *Symptom vs. Cause:* At one point, =tcpdump= revealed clients were querying for =google.com.lab.lan=. This was a correct observation of the client-side search domain behavior but was a symptom, not the root cause. Removing the local domain resulted in correctly formed queries for =google.com.= that still failed.
+
+*** Root Cause Analysis
+The problem was isolated to a silent failure *inside* the OPNsense VM. The packet was arriving at the NIC, but no service was responding.
+
+The final piece of evidence was found in the Dnsmasq log file at =Services -> Dnsmasq DNS & DHCP -> Log File=. A startup line revealed the entire issue:
+#+BEGIN_EXAMPLE
+  started, version 2.91 DNS disabled
+#+END_EXAMPLE
+
+The Dnsmasq service was starting *only* in DHCP mode; its DNS server functionality was completely disabled. Because no process was bound to UDP port 53 on the LAN interface, the OPNsense kernel was dropping the incoming DNS query packets from the clients. This is why the packets never appeared in the firewall's live log viewer—they were dropped before they ever reached the firewall ruleset engine.
+
+The cause for this was determined to be the =Listen port= setting in the Dnsmasq configuration. Leaving it at the default value of =0=, which should have defaulted to 53, instead caused the DNS portion of the service to fail to initialize.
+
+*** Resolution
+1.  Navigate to =Services -> Dnsmasq DNS & DHCP -> General=.
+2.  Set the =Listen port= value explicitly to =53=.
+3.  Save and apply the changes.
+
+Upon restart, the Dnsmasq service initialized correctly with both DHCP and DNS enabled, and all connectivity was restored. Your methodical use of =tcpdump= and log analysis was critical to uncovering the root cause when all UI-level configurations appeared correct.

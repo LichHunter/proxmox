@@ -1,0 +1,12 @@
+.DS_Store
+.idea
+*.log
+tmp/
+
+/.collections/
+/result*
+outputs/
+vars/
+
+.direnv
+.env

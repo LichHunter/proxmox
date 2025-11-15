@@ -1,0 +1,163 @@
+#+title: Readme
+
+* Configure Proxmox
+1. Add your ssh key to proxmox authorized_keys
+
+* Install requirements
+- [[https://github.com/ansible-collections/community.mongodb][community.mongodb]]
+- community.proxmox
+- commonity.general
+
+** Install requirements manually
+#+begin_src bash
+ansible-galaxy collection install -U community.general
+
+ansible-galaxy collection install -U community.proxmox
+
+ansible-galaxy collection install -U community.mongodb
+#+end_src
+
+* Usefull stuff
+** Save data to vault
+[[https://www.reddit.com/r/ansible/comments/1co5b81/write_to_vault_from_a_play/][Source]]
+#+begin_src yaml
+# get vault password from vault file to decrypt vault variable
+- name: set vault password as vault pass
+  set_fact:
+    vault_pass: "{{ lookup('ansible.builtin.file', vault_pass_file) }}"
+  delegate_to: localhost
+  no_log: true
+
+- name: Generate console password
+  set_fact:
+    console_password: "{{ lookup('community.general.random_string', length=20, min_lower=1, min_upper=1, min_numeric=1, min_special=1, override_special='!@#$%^&*') }}"
+  delegate_to: localhost
+
+# this actually puts it in to a template so I can have multiple passwords in yaml format
+- name: create templated yaml structure
+  ansible.builtin.set_fact:
+    encrypted_content: "{{ lookup('ansible.builtin.template', 'updatePassword.j2' )}}"
+  delegate_to: localhost
+
+ - name: Write the content to a new file and encrypt it
+  copy:
+    content: "{{ encrypted_content | ansible.builtin.vault(vault_pass) }}"
+    dest: "inventory/group_vars/{{ item }}"
+    mode: '0660'
+    owner: 'svc.cm'
+    decrypt: false
+  delegate_to: localhost
+#+end_src
+** Vault installation
+[[https://github.com/zjleblanc/ansible-cloud-mgmt/blob/master/playbooks/vault/install_vault.yml][Source]]
+#+begin_src yaml
+# Developed following this guide:
+# https://developer.hashicorp.com/vault/tutorials/day-one-raft/raft-deployment-guide
+---
+- name: Install Community Vault
+  hosts: vault # used a RHEL 9.2 vm
+
+  vars:
+    # Ensure SSL files are copied to expected dest
+    # You can do this with Ansible or manually copy to host
+    # I use Let's Encrypt as my free Certificate Authority
+    vault_fqdn: "vault.autodotes.com"
+    vault_port: "2083"
+    vault_storage_path: /opt/vault/data
+    vault_tls_enabled: "{{ vault_tls | bool | default(true) }}"
+    vault_tls_cert_dest: "/opt/vault/tls/fullchain_{{ vault_fqdn }}.pem"
+    vault_tls_key_dest: "/opt/vault/tls/{{ vault_fqdn }}.key"
+    vault_no_log: "{{ vault_secure_log | bool | default(true) }}"
+    vault_addr: "{{ vault_tls_enabled | ternary('https', 'http') }}://{{ vault_fqdn }}:{{ vault_port }}"
+
+  tasks:
+    - name: Install yum-utils
+      become: true
+      ansible.builtin.yum:
+        name: yum-utils
+
+    - name: Add repository
+      become: true
+      ansible.builtin.yum_repository:
+        name: Hashicorp
+        description: Hashicorp Stable - $basearch
+        baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+        enabled: true
+        gpgcheck: true
+        gpgkey: https://rpm.releases.hashicorp.com/gpg
+
+    - name: Install vault
+      become: true
+      ansible.builtin.dnf:
+        name: vault
+
+    - name: Create storage
+      become: true
+      ansible.builtin.file:
+        name: "{{ vault_storage_path }}"
+        owner: vault
+        group: vault
+        mode: "0755"
+        state: directory
+
+    - name: Template vault config
+      become: true
+      ansible.builtin.template:
+        src: templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+
+    - name: Start vault service
+      become: true
+      ansible.builtin.service:
+        name: vault
+        enabled: true
+        state: restarted
+
+    - name: Setup firewall rule
+      become: true
+      ansible.posix.firewalld:
+        port: "{{ vault_port }}/tcp"
+        permanent: true
+        state: enabled
+
+    - name: Vault init
+      register: r_vault_init
+      no_log: "{{ vault_no_log | default(true) }}"
+      environment:
+        VAULT_ADDR: "{{ vault_addr }}"
+      ansible.builtin.command:
+        cmd: vault operator init -format json
+
+    - name: Vault init data
+      no_log: "{{ vault_no_log | default(true) }}"
+      ansible.builtin.set_fact:
+        vault_init_data: "{{ r_vault_init.stdout | from_json }}"
+
+    - name: Save vault data
+      become: true
+      ansible.builtin.copy:
+        content: "{{ vault_init_data | to_nice_json(indent=2) }}"
+        dest: "{{ vault_storage_path }}/init_data.json"
+
+    - name: Vault unseal
+      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+      no_log: "{{ vault_no_log | default(true) }}"
+      environment:
+        VAULT_ADDR: "{{ vault_addr }}"
+      ansible.builtin.command:
+        cmd: "vault operator unseal -format json {{ item }}"
+
+    - name: Vault status
+      register: r_vault_status
+      no_log: "{{ vault_no_log | default(true) }}"
+      environment:
+        VAULT_ADDR: "{{ vault_addr }}"
+      ansible.builtin.command:
+        cmd: "vault status -format json"
+
+    - name: Vault status report
+      ansible.builtin.debug:
+        msg: "{{ r_vault_status.stdout | from_json }}"
+#+end_src
+** Manage proxmox with Ansible
+https://github.com/community-scripts/ProxmoxVE/discussions/2713
