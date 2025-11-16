@@ -1,7 +1,10 @@
+---
 - name: Setup ansible-pct user and configure environment on Proxmox host
   hosts: proxmox
   gather_facts: false
   become: true
+  roles:
+    - zsh
 
   tasks:
     - name: Install sudo
