@@ -155,6 +155,11 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
         address = "dhcp"
       }
     }
+
+    dns {
+      domain  = "lab.local"
+      servers = ["192.168.100.1"]
+    }
   }
 
   network_interface {
