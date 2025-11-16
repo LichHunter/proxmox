@@ -3,6 +3,8 @@
   hosts: mongodb
   gather_facts: true
   become: false
+  roles:
+    - zsh
 
   tasks:
     - name: Verify connection to the container
@@ -95,6 +97,8 @@
   hosts: vault
   gather_facts: true
   become: false
+  roles:
+    - zsh
   vars:
     # Ensure SSL files are copied to expected dest
     # You can do this with Ansible or manually copy to host

@@ -1,7 +1,9 @@
 ---
-- name: Install zsh
+- name: Install packages
   ansible.builtin.apt:
-    name: zsh
+    name:
+      - zsh
+      - git
     state: present
     update_cache: true
 
@@ -22,7 +24,7 @@
   register: oh_my_zsh_stat
 
 - name: Run Oh My Zsh installation script
-  command: sh "{{ home }}install_ohmyzsh.sh" --unattended
+  command: sh "{{ home }}/install.sh" --unattended
   register: ohmyzsh_result
   failed_when: "'FAILED' in ohmyzsh_result.stderr"
   when: not oh_my_zsh_stat.stat.exists
@@ -47,5 +49,12 @@
   ansible.builtin.copy:
     src: files/zshrc
     dest: "{{ home }}/.zshrc"
+    mode: "0644"
+    owner: "{{ user }}"
+
+- name: Copy .p10k.zsh config
+  ansible.builtin.copy:
+    src: files/p10k.zsh
+    dest: "{{ home }}/.p10k.zsh"
     mode: "0644"
     owner: "{{ user }}"

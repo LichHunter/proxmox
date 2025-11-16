@@ -16,6 +16,12 @@ ansible-galaxy collection install -U community.proxmox
 
 ansible-galaxy collection install -U community.mongodb
 #+end_src
+* Configure machines
+#+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/setup-proxmox-host.yaml
+
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-lxc.yaml --extra-vars "@vars/dev.yaml"
+#+end_src
 
 * Usefull stuff
 ** Save data to vault
