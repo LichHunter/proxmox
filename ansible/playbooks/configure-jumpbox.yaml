@@ -1,8 +1,16 @@
 ---
-- name: Harden and configure the jumpbox
+- name: Configure user shells and environments
   hosts: jumpbox
   roles:
-    - zsh
+    - role: zsh
+      vars:
+        zsh:
+          users:
+            - name: root
+            - name: developer
+
+- name: Harden and configure the jumpbox
+  hosts: jumpbox
 
   handlers:
     - name: restart sshd
@@ -78,4 +86,3 @@
         name: fail2ban
         state: started
         enabled: true
-

@@ -1,2 +1,5 @@
 ---
-user: "root"
+zsh:
+  users:
+    - name: root
+      home: "/root"
