@@ -43,7 +43,7 @@ For simple, integrated DNS and DHCP, Dnsmasq is the correct tool.
     - Scroll down and set the =DHCP default domain= to your desired internal domain (e.g., =lab.lan=).
 6.  *Apply Changes:* Click the =Apply= button. Your protected LAN now has fully functional DHCP and automatically registered DNS for its clients.
 
-** Part 3: Post-Mortem: Troubleshooting DNS Resolution Failure
+** Troubleshooting DNS Resolution Failure
 *** Synopsis
 After a seemingly correct configuration, clients on the protected LAN could obtain DHCP leases but could not resolve external domain names (e.g., =ping google.com= failed). However, pinging external IP addresses (=ping 8.8.8.8=) worked. This indicated a DNS-specific failure.
 
@@ -77,3 +77,6 @@ The cause for this was determined to be the =Listen port= setting in the Dnsmasq
 3.  Save and apply the changes.
 
 Upon restart, the Dnsmasq service initialized correctly with both DHCP and DNS enabled, and all connectivity was restored. Your methodical use of =tcpdump= and log analysis was critical to uncovering the root cause when all UI-level configurations appeared correct.
+* Usefull stuff
+** Git hooks
+[[https://github.com/cachix/git-hooks.nix][cachix/git-hooks]]
