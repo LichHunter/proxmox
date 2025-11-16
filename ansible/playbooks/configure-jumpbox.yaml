@@ -1,0 +1,81 @@
+---
+- name: Harden and configure the jumpbox
+  hosts: jumpbox
+  roles:
+    - zsh
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+  tasks:
+    - name: Create user
+      ansible.builtin.user:
+        name: developer
+        state: present
+        shell: /bin/zsh
+
+    - name: Set up authorized_key for the user
+      ansible.posix.authorized_key:
+        user: developer
+        state: present
+        key: "{{ users.developer.public_key }}"
+
+    - name: Harden SSH daemon configuration
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}"
+        line: "{{ item.key }} {{ item.value }}"
+        state: present
+        validate: 'sshd -t -f %s'
+      loop:
+        - {key: 'PasswordAuthentication', value: 'no'}
+        - {key: 'PermitRootLogin', value: 'no'}
+        - {key: 'PubkeyAuthentication', value: 'yes'}
+        - {key: 'ChallengeResponseAuthentication', value: 'no'}
+        - {key: 'X11Forwarding', value: 'no'}
+        - {key: 'AllowAgentForwarding', value: 'no'}
+
+    - name: Disable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '0'
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/99-ansible.conf
+
+    - name: Disable IPv6 forwarding for all interfaces
+      ansible.posix.sysctl:
+        name: net.ipv6.conf.all.forwarding
+        value: '0'
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/99-ansible.conf
+
+    - name: Install security-focused packages
+      ansible.builtin.apt:
+        name:
+          - ufw        # Uncomplicated Firewall
+          - fail2ban   # Blocks IPs that fail to log in
+        state: present
+        update_cache: true
+
+    - name: Configure ufw to allow only SSH
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Enable ufw firewall
+      community.general.ufw:
+        state: enabled
+        policy: deny
+
+    - name: Enable and start fail2ban service
+      ansible.builtin.service:
+        name: fail2ban
+        state: started
+        enabled: true
+

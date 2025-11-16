@@ -127,6 +127,52 @@ resource "proxmox_virtual_environment_vm" "opnsense_vm" {
   }
 }
 
+# Jumpbox machine to allow ssh connection inside firewall
+resource "proxmox_virtual_environment_container" "jumpbox_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1238
+  tags         = ["ansible_managed", "jumpbox"]
+  unprivileged = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 4
+  }
+
+  initialization {
+    hostname = "jumpbox"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"
