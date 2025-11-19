@@ -8,6 +8,7 @@ LOG_FILE="{{ acme_log_file_path }}-$(date '+%Y-%m-%d %H:%M:%S')"
 CERT_DIR="{{ acme_cert_dir }}"
 KEY_DIR="{{ acme_key_dir }}"
 RENEW_THRESHOLD_HOURS="{{ acme_renew_threshold_hours }}"
+CERT_FILE="${CERT_DIR}/${HOSTNAME}.crt"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
