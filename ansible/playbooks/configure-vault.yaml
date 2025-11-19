@@ -1,0 +1,250 @@
+---
+- name: Install Hashicopr Vault
+  hosts: vault
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+  vars:
+    vault_fqdn: "vault.homelab.com"
+    vault_storage_path: /opt/vault/data
+    vault_no_log: "{{ vault_secure_log | bool | default(true) }}"
+
+    vault_tls_enabled: "{{ vault_tls | bool | default(true) }}"
+    vault_tls_path: "/opt/vault/tls"
+    vault_tls_key_file: "/opt/vault/tls/{{ vault_fqdn }}.key"
+    vault_tls_fullchain_file: "{{ vault_tls_path }}/{{ vault_fqdn }}-fullchain.pem"
+    vault_addr: "{{ vault_tls_enabled | ternary('https', 'http') }}://{{ vault_fqdn }}:{{ vault_port | default(8200) }}"
+
+    github_org: "LichHunter"
+    github_repo: "proxmox-vault"
+    github_repo_path: "/root/{{ github_repo }}"
+    github_ssh_key_path: "/root/.ssh/github_deploy_key"
+
+  tasks:
+    - name: Verify connection to the container
+      ansible.builtin.ping:
+
+    - name: Install required packges
+      ansible.builtin.apt:
+        name:
+          - gnupg
+          - curl
+          - vim
+          - socat
+        state: present
+        update_cache: true
+
+    - name: Import Hashicorp GPG key
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg -o /usr/share/keyrings/hashicorp-archive-keyring.gpg --dearmor --yes
+
+    - name: Create list file
+      ansible.builtin.shell:
+        cmd: echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_facts.distribution_release }} main" | tee /etc/apt/sources.list.d/hashicorp.list
+
+    - name: Install vault requirements
+      ansible.builtin.apt:
+        name:
+          - terraform
+          - vault
+        state: present
+        update_cache: true
+
+    - name: Create storage
+      ansible.builtin.file:
+        name: "{{ vault_storage_path }}"
+        owner: vault
+        group: vault
+        mode: "0755"
+        state: directory
+
+    - name: Template vault config
+      ansible.builtin.template:
+        src: templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+
+    - name: Start vault service
+      ansible.builtin.service:
+        name: vault
+        enabled: true
+        state: restarted
+
+    - block:
+        - name: Vault init
+          register: r_vault_init
+          no_log: "{{ vault_no_log | default(true) }}"
+          environment:
+            VAULT_ADDR: "{{ vault_addr }}"
+          ansible.builtin.command:
+            cmd: vault operator init -format json
+          ignore_errors: true
+
+        - meta: end_play
+          when: r_vault_init is failed
+
+    - name: Vault init data
+      no_log: "{{ vault_no_log | default(true) }}"
+      ansible.builtin.set_fact:
+        vault_init_data: "{{ r_vault_init.stdout | from_json }}"
+
+    - name: Save vault data
+      ansible.builtin.copy:
+        content: "{{ vault_init_data | to_nice_json(indent=2) }}"
+        dest: "{{ vault_storage_path }}/init_data.json"
+
+    - name: Vault unseal
+      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+      no_log: "{{ vault_no_log | default(true) }}"
+      environment:
+        VAULT_ADDR: "{{ vault_addr }}"
+      ansible.builtin.command:
+        cmd: "vault operator unseal -format json {{ item }}"
+
+    - name: Generate SSH key for GitHub access
+      community.crypto.openssh_keypair:
+        path: "{{ github_ssh_key_path }}"
+        type: ed25519
+        owner: root
+        mode: "0600"
+
+    - name: Read public key for GitHub
+      ansible.builtin.slurp:
+        src: "{{ github_ssh_key_path }}.pub"
+      register: r_ssh_pub_key
+
+    - name: Add deploy key to private GitHub repository
+      community.general.github_deploy_key:
+        repo: "{{ github_repo }}"
+        owner: "{{ github_org }}"
+        name: "ansible-vault-bootstrap-{{ ansible_date_time.iso8601 }}"
+        key: "{{ r_ssh_pub_key.content | b64decode }}"
+        read_only: true
+        token: "{{ github_access_token }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Clone private Terraform repository
+      ansible.builtin.git:
+        repo: "git@github.com:{{ github_org }}/{{ github_repo }}.git"
+        dest: "{{ github_repo_path }}"
+        version: master
+        key_file: "{{ github_ssh_key_path }}"
+        accept_newhostkey: true
+
+    - name: Template vault terraform variables
+      ansible.builtin.template:
+        src: templates/vault_terraform_vars.tfvars.j2
+        dest: "{{ github_repo_path }}/terraform.tfvars"
+      vars:
+        vault_tls_enabled: false
+
+    - name: Configure vault using terraform
+      community.general.terraform:
+        project_path: "{{ github_repo_path }}"
+        state: present
+        force_init: true
+      environment:
+        VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
+        VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+      register: r_terraform_apply
+      no_log: "{{ vault_no_log | bool }}"
+
+    - name: Install acme
+      ansible.builtin.shell: curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online
+      args:
+        creates: /root/.acme.sh/acme.sh
+
+    - name: Issue Vault's certificate from its own HTTP ACME endpoint
+      ansible.builtin.command: >
+        /root/.acme.sh/acme.sh --issue --standalone -d "{{ vault_fqdn }}"
+        --server "http://127.0.0.1:{{ vault_port | default(8200) }}/v1/intermediate_ca/acme/directory"
+        --keylength 4096 --insecure
+      args:
+        creates: "/root/.acme.sh/{{ vault_fqdn }}/{{ vault_fqdn }}.cer"
+
+    - name: Install certificate to Vault's TLS directory and set ownership
+      block:
+        - name: Install certificates
+          ansible.builtin.command: >
+            /root/.acme.sh/acme.sh --install-cert -d "{{ vault_fqdn }}"
+            --key-file       "{{ vault_tls_key_file }}"
+            --fullchain-file "{{ vault_tls_fullchain_file }}"
+          args:
+            creates: "{{ vault_tls_fullchain_file }}"
+        - name: Set ownership
+          ansible.builtin.shell:
+            cmd: |
+                chown -R vault:vault /opt/vault/tls
+                chmod 644 "{{ vault_tls_fullchain_file }}"
+                chmod 600 "{{ vault_tls_key_file }}"
+
+    - name: Template vault config
+      ansible.builtin.template:
+        src: templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+      vars:
+        vault_tls_enabled: true
+
+    - name: Restart vault service
+      ansible.builtin.service:
+        name: vault
+        enabled: true
+        state: restarted
+
+    - name: Re-Unseal Vault over HTTPS
+      ansible.builtin.command: "vault operator unseal {{ item }}"
+      environment:
+        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+        VAULT_SKIP_VERIFY: "true"
+      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+      no_log: "{{ vault_no_log | bool }}"
+
+    - name: Template vault terraform variables with TLS
+      ansible.builtin.template:
+        src: templates/vault_terraform_vars.tfvars.j2
+        dest: "{{ github_repo_path }}/terraform.tfvars"
+      vars:
+        vault_tls_enabled: true
+
+    - name: Configure vault using terraform to use TLS
+      community.general.terraform:
+        project_path: "{{ github_repo_path }}"
+        state: present
+        force_init: true
+      environment:
+        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+        VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+        VAULT_SKIP_VERIFY: "true"
+      register: r_terraform_apply
+      no_log: "{{ vault_no_log | bool }}"
+
+    - name: Setup acme automatic cert rotation
+      ansible.builtin.include_role:
+        name: acme
+      vars:
+        acme_domain: "{{ vault_fqdn }}"
+        acme_hostname: "{{ vault_fqdn }}"
+        acme_home: "/root/.acme.sh"
+        acme_cert_owner: "vault"
+        acme_cert_group: "vault"
+        acme_reload_cmd: "systemctl reload vault"
+
+    - name: Vault status
+      register: r_vault_status
+      no_log: "{{ vault_no_log | default(true) }}"
+      environment:
+        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+      ansible.builtin.command:
+        cmd: "vault status -format json"
+
+    - name: Vault status report
+      ansible.builtin.debug:
+        msg: "{{ r_vault_status.stdout | from_json }}"
+
+    - name: Create a local, unencrypted file with the Vault secrets
+      ansible.builtin.template:
+        src: templates/vault_secrets.yaml.j2
+        dest: "../outputs/vault_secrets.yml"
+        mode: '0600'
+      delegate_to: localhost

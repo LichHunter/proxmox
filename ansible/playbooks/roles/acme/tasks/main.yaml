@@ -1,0 +1,61 @@
+---
+- name: Install required packges
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - curl
+      - vim
+      - socat
+    state: present
+    update_cache: true
+
+- name: Install acme
+  ansible.builtin.shell: curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online
+  args:
+    creates: "{{ acme_home }}/acme.sh"
+
+- name: Ensure log file exists
+  ansible.builtin.file:
+    path: "{{ acme_log_file_path }}"
+    state: touch
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Template the certificate renewal script
+  ansible.builtin.template:
+    src: files/renew-cert.sh.j2
+    dest: "{{ acme_script_path }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Template the systemd service unit
+  ansible.builtin.template:
+    src: files/acme-cert-renewal.service.j2
+    dest: /etc/systemd/system/acme-cert-renewal.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd daemon
+
+- name: Template the systemd timer unit
+  ansible.builtin.template:
+    src: files/acme-cert-renewal.timer.j2
+    dest: /etc/systemd/system/acme-cert-renewal.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd daemon
+
+- name: Enable and start the systemd timer
+  ansible.builtin.systemd:
+    name: acme-cert-renewal.timer
+    state: started
+    enabled: true
+
+- name: Perform initial certificate request if cert doesn't exist
+  ansible.builtin.command:
+    cmd: "{{ acme_script_path }}"
+  args:
+    creates: "{{ acme_cert_dir }}/{{ acme_hostname }}.crt"

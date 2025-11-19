@@ -29,6 +29,11 @@ resource "proxmox_virtual_environment_container" "mongodb_container" {
         address = "dhcp"
       }
     }
+
+    dns {
+      domain  = "homelab.com"
+      servers = ["192.168.100.1"]
+    }
   }
 
   network_interface {
@@ -64,6 +69,11 @@ resource "proxmox_virtual_environment_container" "vault_container" {
       ipv4 {
         address = "dhcp"
       }
+    }
+
+    dns {
+      domain  = "homelab.com"
+      servers = ["192.168.100.1"]
     }
   }
 
@@ -146,7 +156,8 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
 
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "192.168.1.36/24"
+        gateway = "192.168.1.1"
       }
     }
 
@@ -157,7 +168,7 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
     }
 
     dns {
-      domain  = "lab.local"
+      domain  = "homelab.com"
       servers = ["192.168.100.1"]
     }
   }

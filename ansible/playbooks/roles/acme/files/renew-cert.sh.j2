@@ -1,0 +1,73 @@
+#!/usr/bin/env sh
+ACME_HOME="{{ acme_home }}"
+DOMAIN="{{ acme_domain }}"
+HOSTNAME="{{ acme_hostname }}"
+ACME_DIR="{{ acme_server_url }}"
+KEY_LENGTH="{{ acme_key_length }}"
+LOG_FILE="{{ acme_log_file_path }}-$(date '+%Y-%m-%d %H:%M:%S')"
+CERT_DIR="{{ acme_cert_dir }}"
+KEY_DIR="{{ acme_key_dir }}"
+RENEW_THRESHOLD_HOURS="{{ acme_renew_threshold_hours }}"
+
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+log_message "Starting certificate renewal task for ${DOMAIN}"
+
+# --- Expiry Check Logic ---
+# First, check if the main certificate file even exists.
+if [ ! -f "${CERT_FILE}" ]; then
+    log_message "Certificate file not found at ${CERT_FILE}. Proceeding with initial issuance."
+else
+    # File exists, so check its expiry using openssl's built-in command.
+    # Calculate the threshold in seconds, as required by 'openssl -checkend'.
+    RENEW_THRESHOLD_SECONDS=$(( RENEW_THRESHOLD_HOURS * 3600 ))
+
+    # The '-checkend' command is perfect for this:
+    # - It returns exit code 0 (success) if the certificate is VALID beyond the threshold.
+    # - It returns exit code 1 (failure) if it is EXPIRED or WILL EXPIRE within the threshold.
+    if openssl x509 -in "${CERT_FILE}" -noout -checkend ${RENEW_THRESHOLD_SECONDS}; then
+        # Exit code was 0, so the certificate is still good.
+        log_message "Certificate is still valid for more than ${RENEW_THRESHOLD_HOURS} hours. Skipping renewal."
+        exit 0
+    else
+        # Exit code was 1, so the certificate is expiring soon.
+        log_message "Certificate is expiring within ${RENEW_THRESHOLD_HOURS} hours. Proceeding with renewal."
+    fi
+fi
+
+log_message "Certificate needs renewal. Issuing/Renewing certificate..."
+${ACME_HOME}/acme.sh --issue \
+    -d "${DOMAIN}" \
+    --standalone \
+    --server "${ACME_DIR}" \
+    --keylength ${KEY_LENGTH} \
+    --force --debug >> "$LOG_FILE" 2>&1
+
+if [ $? -eq 0 ]; then
+    log_message "Certificate successfully issued/renewed"
+
+    log_message "Installing certificate to system directories..."
+    ${ACME_HOME}/acme.sh --install-cert \
+        -d "${DOMAIN}" \
+        --cert-file "${CERT_DIR}/${HOSTNAME}.crt" \
+        --key-file "${KEY_DIR}/${HOSTNAME}.key" \
+        --fullchain-file "${CERT_DIR}/${HOSTNAME}-fullchain.pem" \
+        --reloadcmd "{{ acme_reload_cmd }}" \
+        >> "$LOG_FILE" 2>&1
+
+    # Set proper permissions
+    chown "{{ acme_cert_owner }}:{{ acme_cert_group }}" "${CERT_DIR}/${HOSTNAME}.crt"
+    chown "{{ acme_cert_owner }}:{{ acme_cert_group }}" "${CERT_DIR}/${HOSTNAME}-fullchain.pem"
+    chown "{{ acme_cert_owner }}:{{ acme_cert_group }}" "${KEY_DIR}/${HOSTNAME}.key"
+
+    chmod 644 "${CERT_DIR}/${HOSTNAME}.crt"
+    chmod 644 "${CERT_DIR}/${HOSTNAME}-fullchain.pem"
+    chmod 600 "${KEY_DIR}/${HOSTNAME}.key"
+
+    log_message "Certificate installation completed"
+else
+    log_message "ERROR: Certificate renewal failed. Check ${LOG_FILE} for details."
+    exit 1
+fi

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ACME certificate renewal job twice a day
+
+[Timer]
+OnCalendar={{ acme_timer_schedule }}
+RandomizedDelaySec={{ acme_timer_random_delay }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
