@@ -1,0 +1,32 @@
+---
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - containerd.io=1.7.28-1~debian.13~trixie
+    state: present
+    update_cache: true
+    allow_downgrade: true
+
+- name: Add Docker repo
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: "https://download.docker.com/linux/debian"
+    components: [stable]
+    signed_by: https://download.docker.com/linux/debian/gpg
+    state: present
+    enabled: true
+    suites: "{{ ansible_facts.distribution_release }}"
+
+- name: Install docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true

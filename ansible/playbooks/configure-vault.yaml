@@ -35,13 +35,16 @@
         state: present
         update_cache: true
 
-    - name: Import Hashicorp GPG key
-      ansible.builtin.shell:
-        cmd: curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg -o /usr/share/keyrings/hashicorp-archive-keyring.gpg --dearmor --yes
-
-    - name: Create list file
-      ansible.builtin.shell:
-        cmd: echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_facts.distribution_release }} main" | tee /etc/apt/sources.list.d/hashicorp.list
+    - name: Add Hashicorp repo
+      ansible.builtin.deb822_repository:
+        name: hashicorp
+        types: [deb]
+        uris: "https://apt.releases.hashicorp.com"
+        components: [main]
+        signed_by: https://apt.releases.hashicorp.com/gpg
+        state: present
+        enabled: true
+        suites: "{{ ansible_facts.distribution_release }}"
 
     - name: Install vault requirements
       ansible.builtin.apt:
@@ -70,28 +73,46 @@
         enabled: true
         state: restarted
 
-    - block:
-        - name: Vault init
-          register: r_vault_init
-          no_log: "{{ vault_no_log | default(true) }}"
-          environment:
-            VAULT_ADDR: "{{ vault_addr }}"
+    - name: Check if Vault has already been initialized by looking for the init file
+      ansible.builtin.stat:
+        path: "{{ vault_storage_path }}/init_data.json"
+      register: r_init_data_file
+
+    - name: Read existing Vault init data if it exists
+      # The 'slurp' module reads the entire file into a base64 encoded string.
+      ansible.builtin.slurp:
+        src: "{{ vault_storage_path }}/init_data.json"
+      register: r_slurped_data
+      # This task only runs if the stat check found the file.
+      when: r_init_data_file.stat.exists
+
+    - name: Block to run only when Vault needs to be initialized
+      block:
+        - name: Initialize Vault for the first time
           ansible.builtin.command:
             cmd: vault operator init -format json
-          ignore_errors: true
+          environment:
+            VAULT_ADDR: "{{ vault_addr }}"
+          register: r_vault_init
+          changed_when: r_vault_init.rc == 0
+          failed_when:
+            - r_vault_init.rc != 0
+            - "'Vault is already initialized' not in r_vault_init.stderr"
 
-        - meta: end_play
-          when: r_vault_init is failed
+        - name: Save the new init data to a file for future runs
+          ansible.builtin.copy:
+            content: "{{ vault_init_data | to_nice_json(indent=2) }}"
+            dest: "{{ vault_storage_path }}/init_data.json"
+            owner: vault
+            group: vault
+            mode: '0600'
+          when: r_vault_init.changed
+      when: not r_init_data_file.stat.exists
 
-    - name: Vault init data
-      no_log: "{{ vault_no_log | default(true) }}"
+    - name: Consolidate Vault init data into a single variable
       ansible.builtin.set_fact:
-        vault_init_data: "{{ r_vault_init.stdout | from_json }}"
-
-    - name: Save vault data
-      ansible.builtin.copy:
-        content: "{{ vault_init_data | to_nice_json(indent=2) }}"
-        dest: "{{ vault_storage_path }}/init_data.json"
+        vault_init_data: "{{ (r_slurped_data.content | b64decode | from_json) if r_init_data_file.stat.exists else (r_vault_init.stdout | from_json) }}"
+      no_log: "{{ vault_no_log | default(true) }}"
 
     - name: Vault unseal
       loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
@@ -131,6 +152,7 @@
         version: master
         key_file: "{{ github_ssh_key_path }}"
         accept_newhostkey: true
+        force: true
 
     - name: Template vault terraform variables
       ansible.builtin.template:

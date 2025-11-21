@@ -14,13 +14,16 @@
   args:
     creates: "{{ acme_home }}/acme.sh"
 
-- name: Ensure log file exists
-  ansible.builtin.file:
-    path: "{{ acme_log_file_path }}"
-    state: touch
-    mode: '0644'
-    owner: root
-    group: root
+- name: Ensure certificate folder exists
+  block:
+    - name: Ensure cert directory exists
+      ansible.builtin.file:
+        state: directory
+        path: "{{ acme_cert_dir }}"
+    - name: Ensure key directory exists
+      ansible.builtin.file:
+        state: directory
+        path: "{{ acme_key_dir }}"
 
 - name: Template the certificate renewal script
   ansible.builtin.template:
@@ -59,3 +62,5 @@
     cmd: "{{ acme_script_path }}"
   args:
     creates: "{{ acme_cert_dir }}/{{ acme_hostname }}.crt"
+  environment:
+    VAULT_TOKEN: "{{ acme_vault_token }}"

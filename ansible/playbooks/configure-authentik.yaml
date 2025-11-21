@@ -1,0 +1,61 @@
+---
+- name: Install Authentik
+  hosts: authentik
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+    - docker
+  tasks:
+    - name: Install acme
+      ansible.builtin.include_role:
+        name: acme
+      vars:
+        acme_domain: "authentik.homelab.com"
+        acme_hostname: "{{ acme_domain }}"
+        acme_cert_owner: "root"
+        acme_cert_group: "root"
+        acme_cert_dir: "/opt/authentik/certs"
+        acme_key_dir: "/opt/authentik/certs"
+        acme_vault_token: "{{ vault_token }}"
+        acme_reload_cmd: "docker compose -f /path/to/your/authentik/docker-compose.yml restart authentik-server authentik-worker"
+
+    - name: Install requirements
+      ansible.builtin.apt:
+        name:
+          - python3-hvac
+        state: present
+        update_cache: true
+
+    - name: Login and use the resulting token
+      community.hashi_vault.vault_login:
+        url: https://vault.homelab.com:8200
+        auth_method: token
+        token: "{{ vault_token }}"
+      register: login_data
+
+    - name: Get Authentik secret
+      community.hashi_vault.vault_kv2_get:
+        url: https://vault.homelab.com:8200
+        engine_mount_point: kvv2
+        path: authentik
+        token: "{{ vault_token }}"
+      register: response
+
+    - name: Create Authentik docker folder
+      ansible.builtin.file:
+        state: directory
+        path: /root/authentik
+
+    - name: Copy Authentik compose
+      ansible.builtin.template:
+        src: templates/authentik_compose.yaml.j2
+        dest: /root/authentik/compose.yaml
+        mode: '0600'
+
+    - name: Run `docker compose up`
+      community.docker.docker_compose_v2:
+        project_src: /root/authentik
+      environment:
+        PG_PASS: "{{ response.secret.pg_pass }}"
+        AUTHENTIK_SECRET_KEY: "{{ response.secret.secret }}"

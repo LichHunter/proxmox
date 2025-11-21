@@ -8,6 +8,14 @@
     state: present
     update_cache: true
 
+- name: Create user
+  loop: "{{ zsh.users }}"
+  user:
+    name: "{{ item.name }}"
+    shell: /bin/zsh
+    create_home: "{{ item.name != 'root' }}"
+    state: present
+
 - name: Configure zsh for user
   vars:
     default_home_path: "{{ '/root' if item.name == 'root' else '/home/' + item.name }}"

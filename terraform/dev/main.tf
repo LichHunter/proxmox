@@ -189,6 +189,69 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
   }
 }
 
+resource "proxmox_virtual_environment_container" "authentik_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1239
+  tags         = ["ansible_managed", "authentik"]
+  unprivileged = true
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 12
+  }
+
+  initialization {
+    hostname = "authentik"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.1.36/24"
+        gateway = "192.168.1.1"
+      }
+    }
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    dns {
+      domain  = "homelab.com"
+      servers = ["192.168.100.1"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"
@@ -203,7 +266,7 @@ resource "proxmox_virtual_environment_download_file" "opnsense_iso" {
   datastore_id            = var.datastore_id
   node_name               = var.node_name
   url                     = "https://pkg.opnsense.org/releases/25.7/OPNsense-25.7-dvd-amd64.iso.bz2"
-  checksum                = "fa4b30df3f5fd7a2b1a1b2bdfaecfe02337ee42f77e2d0ae8a60753ea7eb153e"
+  checksum                = "36ec856ad34d1a497e9edd19183ac2b63aa3f9bb9ff7e7ff7cdc93d319a3ec2c"
   checksum_algorithm      = "sha256"
   file_name               = "OPNsense-25.7-dvd-amd64.iso"
   decompression_algorithm = "bz2"

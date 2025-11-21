@@ -167,3 +167,5 @@ ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-lxc.yaml --extr
 #+end_src
 ** Manage proxmox with Ansible
 https://github.com/community-scripts/ProxmoxVE/discussions/2713
+** Docker not working on LXC
+https://forum.proxmox.com/threads/docker-inside-lxc-net-ipv4-ip_unprivileged_port_start-error.175437/

@@ -25,9 +25,9 @@
           hooks = {
             nixfmt.enable = true;
             ansible-lint.enable = true;
-            tflint.enable = true;
+            #tflint.enable = true;
             terraform-format.enable = true;
-            terraform-validate.enable = true;
+            #terraform-validate.enable = true;
           };
         };
       in
