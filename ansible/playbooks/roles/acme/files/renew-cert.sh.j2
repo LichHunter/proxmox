@@ -9,10 +9,39 @@ CERT_DIR="{{ acme_cert_dir }}"
 KEY_DIR="{{ acme_key_dir }}"
 RENEW_THRESHOLD_HOURS="{{ acme_renew_threshold_hours }}"
 CERT_FILE="${CERT_DIR}/${HOSTNAME}.crt"
+VAULT_TOKEN="{{ acme_vault_token | default('') }}"
+VAULT_ADDR="{{ acme_vault_addr }}"
+VAULT_ROOT_CA_PATH="{{ acme_vault_root_ca_path }}"
+LOCAL_ROOT_CA_PATH="{{ acme_local_root_ca_path }}"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
+
+{% if acme_bootstrap_root_ca %}
+if [ -n "$VAULT_TOKEN" ]; then
+    if [ ! -f "$LOCAL_ROOT_CA_PATH" ]; then
+        log_message "Root CA not found at ${LOCAL_ROOT_CA_PATH}. Attempting to bootstrap from Vault..."
+
+        # Use curl to fetch the CA from Vault's API.
+        # The --insecure/-k flag is necessary as we don't yet trust the CA.
+        if curl -k -s --fail \
+             -H "X-Vault-Token: ${VAULT_TOKEN}" \
+             "${VAULT_ADDR}/v1/${VAULT_ROOT_CA_PATH}/ca/pem" > "/tmp/vault-ca.tmp"; then
+
+            log_message "Successfully downloaded Root CA from Vault."
+            mv "/tmp/vault-ca.tmp" "$LOCAL_ROOT_CA_PATH"
+
+            log_message "Updating system trust store..."
+            update-ca-certificates >> "$LOG_FILE" 2>&1
+        else
+            log_message "ERROR: Failed to download a valid Root CA from Vault. Check token, paths, and Vault health."
+            rm -f "/tmp/vault-ca.tmp"
+            exit 1
+        fi
+    fi
+fi
+{% endif %}
 
 log_message "Starting certificate renewal task for ${DOMAIN}"
 

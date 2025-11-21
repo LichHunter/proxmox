@@ -229,6 +229,9 @@
         acme_cert_owner: "vault"
         acme_cert_group: "vault"
         acme_reload_cmd: "systemctl reload vault"
+        acme_cert_dir: "{{ vault_tls_path }}"
+        acme_key_dir: "{{ vault_tls_path }}"
+        acme_vault_token: "{{ vault_init_data.root_token }}"
 
     - name: Vault status
       register: r_vault_status

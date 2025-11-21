@@ -27,7 +27,7 @@ acme_renew_threshold_hours: 8
 
 # --- Systemd Timer Scheduling ---
 # Runs twice a day by default (e.g., at ~03:00 and ~15:00)
-acme_timer_schedule: "*-*-* 03,15:00:00"
+acme_timer_schedule: "*-*-* 03,09,15,21:00:00"
 # Spreads out the execution within a 1-hour window to avoid
 # all clients hitting the Vault server at the exact same time.
 acme_timer_random_delay: "1h"
@@ -37,3 +37,9 @@ acme_cert_group: "root"
 
 acme_service_user: "root"
 acme_service_group: "root"
+
+acme_bootstrap_root_ca: true
+acme_vault_addr: "https://vault.homelab.com:8200"
+acme_vault_root_ca_path: "root_ca"
+acme_vault_token: ""
+acme_local_root_ca_path: "/usr/local/share/ca-certificates/vault-root-ca.crt"
