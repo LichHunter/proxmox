@@ -184,7 +184,7 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_virtual_environment_download_file.debian_12_lxc_img.id
     type             = "debian"
   }
 }
@@ -215,13 +215,6 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
 
     ip_config {
       ipv4 {
-        address = "192.168.1.36/24"
-        gateway = "192.168.1.1"
-      }
-    }
-
-    ip_config {
-      ipv4 {
         address = "dhcp"
       }
     }
@@ -234,11 +227,6 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
 
   features {
     nesting = true
-  }
-
-  network_interface {
-    name   = "eth0"
-    bridge = "vmbr0"
   }
 
   network_interface {
@@ -273,10 +261,9 @@ resource "proxmox_virtual_environment_download_file" "opnsense_iso" {
 }
 
 resource "proxmox_virtual_environment_download_file" "debian_12_lxc_img" {
-  content_type = "vztmpl"
-  datastore_id = var.datastore_id
-  node_name    = var.node_name
-  # https://forum.proxmox.com/threads/solved-automating-with-bpg-proxmox-how-to-find-url-and-checksum-of-lxc-images.140315/
+  content_type       = "vztmpl"
+  datastore_id       = var.datastore_id
+  node_name          = var.node_name
   url                = "http://download.proxmox.com/images/system/debian-12-standard_12.2-1_amd64.tar.zst"
   checksum           = "1846c5e64253256832c6f7b8780c5cb241abada3ab0913940b831bf8f7f869220277f5551f0abeb796852e448c178be22bd44eb1af8c0be3d5a13decf943398a"
   checksum_algorithm = "sha512"

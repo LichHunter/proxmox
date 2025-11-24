@@ -16,6 +16,7 @@
         acme_cert_owner: "root"
         acme_cert_group: "root"
         acme_cert_dir: "/opt/authentik/certs"
+        acme_create_cert: false
         acme_key_dir: "/opt/authentik/certs"
         acme_vault_token: "{{ vault_token }}"
         acme_reload_cmd: "docker compose -f /path/to/your/authentik/docker-compose.yml restart authentik-server authentik-worker"

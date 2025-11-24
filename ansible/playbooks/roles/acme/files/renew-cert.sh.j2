@@ -80,11 +80,16 @@ if [ $? -eq 0 ]; then
     log_message "Installing certificate to system directories..."
     ${ACME_HOME}/acme.sh --install-cert \
         -d "${DOMAIN}" \
-        --cert-file "${CERT_DIR}/${HOSTNAME}.crt" \
+        {% if acme_create_cert %}--cert-file "${CERT_DIR}/${HOSTNAME}.crt" \ {% endif %}
         --key-file "${KEY_DIR}/${HOSTNAME}.key" \
         --fullchain-file "${CERT_DIR}/${HOSTNAME}-fullchain.pem" \
         --reloadcmd "{{ acme_reload_cmd }}" \
         >> "$LOG_FILE" 2>&1
+
+    {% if not acme_create_cert %}
+    log_message "Creating certificate file for Authentik"
+    cp "${CERT_DIR}/${HOSTNAME}-fullchain.pem" "${CERT_DIR}/${HOSTNAME}.crt"
+    {% endif %}
 
     # Set proper permissions
     chown "{{ acme_cert_owner }}:{{ acme_cert_group }}" "${CERT_DIR}/${HOSTNAME}.crt"

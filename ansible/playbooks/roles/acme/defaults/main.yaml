@@ -24,6 +24,7 @@ acme_log_file_path: "/var/log/cert-renewal.log"
 acme_cert_dir: "/etc/ssl/certs"
 acme_key_dir: "/etc/ssl/private"
 acme_renew_threshold_hours: 8
+acme_create_cert: true
 
 # --- Systemd Timer Scheduling ---
 # Runs twice a day by default (e.g., at ~03:00 and ~15:00)
