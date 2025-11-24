@@ -25,9 +25,9 @@
           hooks = {
             nixfmt.enable = true;
             ansible-lint.enable = true;
-            #tflint.enable = true;
+            tflint.enable = true;
             terraform-format.enable = true;
-            #terraform-validate.enable = true;
+            terraform-validate.enable = true;
           };
         };
       in
@@ -40,15 +40,18 @@
           inherit (pre-commit-check) shellHook;
 
           buildInputs = with pkgs; [
-            terraform
+            opentofu
             ansible
             ansible-lint
+            glab
 
             # Precommit stuff
             pre-commit
             gitleaks
             tflint
           ];
+
+          TF_STATE_NAME = "default";
         };
       }
     );
