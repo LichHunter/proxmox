@@ -240,6 +240,109 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
   }
 }
 
+resource "proxmox_virtual_environment_container" "grafana_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1240
+  tags         = ["ansible_managed", "grafana"]
+  unprivileged = true
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 12
+  }
+
+  initialization {
+    hostname = "grafana"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    dns {
+      domain  = "homelab.com"
+      servers = ["192.168.100.1"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
+resource "proxmox_virtual_environment_container" "unbound_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1241
+  tags         = ["ansible_managed", "unbound", "dns"]
+  unprivileged = true
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 12
+  }
+
+  initialization {
+    hostname = "unbound"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.2/24"
+        gateway = "192.168.100.1"
+      }
+    }
+
+    # dns {
+    #   domain  = "homelab.com"
+    #   servers = ["192.168.100.1"]
+    # }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"

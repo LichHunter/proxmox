@@ -1,0 +1,75 @@
+---
+- name: Install and Configure Unbound DNS Server
+  hosts: unbound
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+
+  vars:
+    unbound_allowed_networks:
+      - "192.168.100.0/24"
+
+  tasks:
+    - name: Verify connection to the container
+      ansible.builtin.ping:
+
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - unbound
+          - dns-root-data
+          - vim
+          - curl
+        state: present
+        update_cache: true
+
+    - name: Create unbound configuration directory
+      ansible.builtin.file:
+        path: /etc/unbound/unbound.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Template unbound configuration
+      ansible.builtin.template:
+        src: templates/unbound.conf.j2
+        dest: /etc/unbound/unbound.conf.d/server.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart unbound
+
+    - name: Enable and start unbound service
+      ansible.builtin.systemd_service:
+        name: unbound
+        state: started
+        enabled: true
+
+    - name: Wait for unbound to be ready
+      ansible.builtin.wait_for:
+        port: 53
+        delay: 2
+        timeout: 30
+
+    - name: Wait for DNSSEC trust anchor priming
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Test unbound DNS resolution
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 google.com
+      register: dns_test
+      changed_when: false
+      failed_when: "'ANSWER SECTION' not in dns_test.stdout"
+
+    - name: Display DNS test result
+      ansible.builtin.debug:
+        msg: "Unbound DNS server is working correctly"
+
+  handlers:
+    - name: Restart unbound
+      ansible.builtin.systemd_service:
+        name: unbound
+        state: restarted

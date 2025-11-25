@@ -1,0 +1,50 @@
+---
+- name: Install Grafana
+  hosts: grafana
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+  vars:
+    acme_domain: "grafana.homelab.com"
+    acme_hostname: "{{ acme_domain }}"
+    acme_cert_owner: "grafana"
+    acme_cert_group: "grafana"
+    acme_create_cert: false
+    acme_cert_dir: "/etc/grafana"
+    acme_key_dir: "/etc/grafana"
+    acme_vault_token: "{{ vault_token }}"
+    acme_reload_cmd: "systemctl restart grafana-server"
+
+  tasks:
+    - name: Add grafana repo
+      ansible.builtin.deb822_repository:
+        name: grafana
+        types: [deb]
+        uris: "https://apt.grafana.com"
+        components: [main]
+        signed_by: https://apt.grafana.com/gpg.key
+        suites: "stable"
+        state: present
+        enabled: true
+
+    - name: Install grafana
+      ansible.builtin.apt:
+        name: grafana
+        update_cache: true
+        state: present
+
+    - name: Template grafana config
+      ansible.builtin.template:
+        src: templates/grafana.ini.j2
+        dest: /etc/grafana/grafana.ini
+
+    - name: Enable grafana
+      ansible.builtin.systemd_service:
+        name: grafana-server
+        state: started
+        enabled: true
+
+    - name: Install acme
+      ansible.builtin.include_role:
+        name: acme

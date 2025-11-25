@@ -1,0 +1,9 @@
+[server]
+http_addr =
+http_port = 3000
+domain = {{ acme_domain }}
+root_url = https://{{ acme_domain }}:3000
+cert_key = {{ acme_key_dir }}/{{ acme_hostname }}.key
+cert_file = {{ acme_cert_dir }}/{{ acme_hostname }}.crt
+enforce_domain = False
+protocol = https
