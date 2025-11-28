@@ -1,0 +1,78 @@
+---
+- name: Configure Nginx with Vault Agent
+  hosts: nginx
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+
+  tasks:
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Ensure nginx SSL directory exists
+      ansible.builtin.file:
+        path: /etc/nginx/ssl
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "https://vault.homelab.com:8200/v1/root_ca/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.com:8200/v1/auth/approle/role/nginx/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: false
+        return_content: true
+      register: nginx_role_id_response
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.com:8200/v1/auth/approle/role/nginx/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: false
+        return_content: true
+      register: nginx_secret_id_response
+
+    - name: Configure Vault Agent for certificate management
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "nginx.homelab.com"
+        vault_agent_reload_cmd: "systemctl reload nginx"
+        vault_agent_role_id: "{{ nginx_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ nginx_secret_id_response.json.data.secret_id }}"
+        vault_agent_cert_folder: "/etc/nginx/ssl"
+
+    - name: Enable and start nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true

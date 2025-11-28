@@ -343,6 +343,52 @@ resource "proxmox_virtual_environment_container" "unbound_container" {
   }
 }
 
+resource "proxmox_virtual_environment_container" "nginx_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1242
+  tags         = ["ansible_managed", "nginx"]
+  unprivileged = true
+
+  cpu {
+    cores = 2
+  }
+
+  memory {
+    dedicated = 1024
+  }
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 8
+  }
+
+  initialization {
+    hostname = "nginx"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"

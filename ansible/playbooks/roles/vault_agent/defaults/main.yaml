@@ -1,0 +1,41 @@
+---
+# roles/vault_agent/defaults/main.yaml
+
+# Vault server address
+vault_agent_vault_addr: "https://vault.homelab.com:8200"
+
+# Root CA bootstrap
+vault_agent_bootstrap_root_ca: true
+# vault pki path
+vault_agent_vault_root_ca_path: "root_ca"
+vault_agent_local_root_ca_path: "/usr/local/share/ca-certificates/vault-root-ca.crt"
+
+# AppRole authentication
+vault_agent_approle_mount_path: "auth/approle"
+vault_agent_remove_secret_id_after_reading: false
+
+# Vault Agent paths
+vault_agent_config_dir: "/etc/vault"
+vault_agent_template_dir: "/etc/vault/templates"
+vault_agent_pid_file: "/var/run/vault-agent.pid"
+vault_agent_token_sink_path: "/tmp/vault-token"
+
+# PKI configuration
+vault_agent_pki_role_path: "intermediate_ca/issue/issue-homelab-certs"
+vault_agent_cert_ttl: "24h"
+
+# Certificate output paths
+vault_agent_cert_folder: "/etc/ssl/certs"
+vault_agent_cert_perms: "0644"
+vault_agent_key_perms: "0600"
+
+# Common name and reload command must be provided from playbook level
+# vault_agent_common_name: ""  # REQUIRED - must be set in playbook
+# vault_agent_reload_cmd: ""   # REQUIRED - must be set in playbook
+
+# Service configuration
+vault_agent_service_user: "root"
+vault_agent_service_group: "root"
+
+# Vault binary version and installation
+vault_agent_binary_path: "/usr/bin/vault"

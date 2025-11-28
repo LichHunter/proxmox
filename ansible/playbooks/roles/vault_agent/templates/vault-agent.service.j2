@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+[Unit]
+Description=HashiCorp Vault Agent
+Documentation=https://www.vaultproject.io/docs/agent
+Requires=network-online.target
+After=network-online.target
+ConditionFileNotEmpty={{ vault_agent_config_dir }}/agent.hcl
+
+[Service]
+Type=simple
+User={{ vault_agent_service_user }}
+Group={{ vault_agent_service_group }}
+ExecStart={{ vault_agent_binary_path }} agent -config={{ vault_agent_config_dir }}/agent.hcl
+ExecReload=/bin/kill --signal HUP $MAINPID
+KillMode=process
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target

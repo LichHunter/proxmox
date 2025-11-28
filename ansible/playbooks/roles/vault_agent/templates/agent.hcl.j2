@@ -1,0 +1,48 @@
+# {{ ansible_managed }}
+# /etc/vault/agent.hcl
+
+pid_file = "{{ vault_agent_pid_file }}"
+
+vault {
+  address = "{{ vault_agent_vault_addr }}"
+}
+
+auto_auth {
+  method "approle" {
+    mount_path = "{{ vault_agent_approle_mount_path }}"
+    config = {
+      role_id_file_path = "{{ vault_agent_config_dir }}/role_id"
+      secret_id_file_path = "{{ vault_agent_config_dir }}/secret_id"
+      remove_secret_id_file_after_reading = {{ vault_agent_remove_secret_id_after_reading | lower }}
+    }
+  }
+
+  sink "file" {
+    config = {
+      path = "{{ vault_agent_token_sink_path }}"
+    }
+  }
+}
+
+# --- TEMPLATE 1: The Public Certificate (Full Chain) ---
+template {
+  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.crt.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_common_name }}.crt"
+  perms       = "{{ vault_agent_cert_perms }}"
+
+  # Reload service when this changes
+  command     = "{{ vault_agent_reload_cmd }}"
+}
+
+# --- TEMPLATE 2: The Private Key ---
+template {
+  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.key.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_common_name }}.key"
+
+  # ONLY root/service should read this.
+  perms       = "{{ vault_agent_key_perms }}"
+
+  # Reload here too. Vault Agent is smart enough not to spam reloads
+  # if both change at once, usually.
+  command     = "{{ vault_agent_reload_cmd }}"
+}

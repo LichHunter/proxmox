@@ -101,7 +101,7 @@
 
         - name: Save the new init data to a file for future runs
           ansible.builtin.copy:
-            content: "{{ vault_init_data | to_nice_json(indent=2) }}"
+            content: "{{ r_vault_init.stdout | from_json | to_nice_json(indent=2) }}"
             dest: "{{ vault_storage_path }}/init_data.json"
             owner: vault
             group: vault

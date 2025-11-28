@@ -1,0 +1,120 @@
+---
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - curl
+    state: present
+    update_cache: true
+
+- name: Add HashiCorp repository
+  ansible.builtin.deb822_repository:
+    name: hashicorp
+    types: deb
+    uris: https://apt.releases.hashicorp.com
+    suites: "{{ ansible_distribution_release }}"
+    components: main
+    architectures: amd64
+    signed_by: https://apt.releases.hashicorp.com/gpg
+    state: present
+
+- name: Install Vault from apt
+  ansible.builtin.apt:
+    name: vault
+    state: present
+    update_cache: true
+
+- name: Bootstrap Vault root CA certificate
+  when: vault_agent_bootstrap_root_ca
+  block:
+    - name: Check if root CA already exists
+      ansible.builtin.stat:
+        path: "{{ vault_agent_local_root_ca_path }}"
+      register: root_ca_stat
+
+    - name: Download root CA from Vault
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "{{ vault_agent_vault_addr }}/v1/{{ vault_agent_vault_root_ca_path }}/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: "{{ vault_agent_local_root_ca_path }}"
+        creates: "{{ vault_agent_local_root_ca_path }}"
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+- name: Ensure Vault Agent directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0755'
+  loop:
+    - "{{ vault_agent_config_dir }}"
+    - "{{ vault_agent_template_dir }}"
+    - "{{ vault_agent_cert_folder }}"
+
+- name: Deploy Vault Agent configuration
+  ansible.builtin.template:
+    src: agent.hcl.j2
+    dest: "{{ vault_agent_config_dir }}/agent.hcl"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0640'
+  notify: Restart vault-agent
+
+- name: Deploy certificate template
+  ansible.builtin.template:
+    src: cert.ctmpl.j2
+    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.crt.ctmpl"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0640'
+  notify: Restart vault-agent
+
+- name: Deploy key template
+  ansible.builtin.template:
+    src: key.ctmpl.j2
+    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.key.ctmpl"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0640'
+  notify: Restart vault-agent
+
+- name: Deploy AppRole credentials
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0600'
+  loop:
+    - content: "{{ vault_agent_role_id }}"
+      dest: "{{ vault_agent_config_dir }}/role_id"
+    - content: "{{ vault_agent_secret_id }}"
+      dest: "{{ vault_agent_config_dir }}/secret_id"
+  no_log: true
+
+- name: Deploy Vault Agent systemd service
+  ansible.builtin.template:
+    src: vault-agent.service.j2
+    dest: /etc/systemd/system/vault-agent.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd daemon
+    - Restart vault-agent
+
+- name: Enable and start Vault Agent service
+  ansible.builtin.systemd:
+    name: vault-agent
+    state: started
+    enabled: true
+    daemon_reload: true
