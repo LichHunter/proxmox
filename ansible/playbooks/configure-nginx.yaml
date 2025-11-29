@@ -23,10 +23,10 @@
       #   backend_port: 3000
       #   backend_protocol: https # (Make sure Grafana has its .lan cert first!)
 
-      # - server_name: authentik.homelab.com
-      #   backend_host: authentik.homelab.lan
-      #   backend_port: 9443
-      #   backend_protocol: https
+      - server_name: authentik.homelab.com
+        backend_host: authentik.homelab.lan
+        backend_port: 9443
+        backend_protocol: https
 
   tasks:
     - name: Install nginx
@@ -43,7 +43,6 @@
         group: root
         mode: '0755'
 
-    # --- TRUST BOOTSTRAP ---
     - name: Check if Vault root CA already exists
       ansible.builtin.stat:
         path: /usr/local/share/ca-certificates/vault-root-ca.crt
