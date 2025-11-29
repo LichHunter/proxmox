@@ -32,6 +32,7 @@ services:
     - ${COMPOSE_PORT_HTTP:-9000}:9000
     - ${COMPOSE_PORT_HTTPS:-9443}:9443
     restart: unless-stopped
+    user: root
     volumes:
     - ./media:/media
     - ./custom-templates:/templates
@@ -49,21 +50,12 @@ services:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
     image: ghcr.io/goauthentik/server:2025.10.2
     restart: unless-stopped
-    user: "1000:999"
+    user: root
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
     - ./media:/media
     - ./custom-templates:/templates
     - /opt/authentik/certs:/certs
-  authentik_ldap:
-      image: ghcr.io/goauthentik/ldap
-      ports:
-          - 389:3389
-          - 636:6636
-      environment:
-          AUTHENTIK_HOST: https://authentik.homelab.com
-          AUTHENTIK_INSECURE: "false"
-          AUTHENTIK_TOKEN: token-generated-by-authentik
 volumes:
   database:
     driver: local

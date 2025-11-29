@@ -6,20 +6,71 @@
   roles:
     - zsh
     - docker
+
+  vars:
+    cert_common_name: "authentik.homelab.lan"
+    cert_filename: "authentik.homelab.lan"
+
   tasks:
-    - name: Install acme
+    - name: Ensure authentik certs directory exists
+      ansible.builtin.file:
+        path: /opt/authentik/certs
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # --- TRUST BOOTSTRAP ---
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate (Internal LAN)
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/authentik/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: authentik_role_id_response
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/authentik/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: authentik_secret_id_response
+
+    - name: Configure Vault Agent for Authentik Certificate
       ansible.builtin.include_role:
-        name: acme
+        name: vault_agent
       vars:
-        acme_domain: "authentik.homelab.com"
-        acme_hostname: "{{ acme_domain }}"
-        acme_cert_owner: "root"
-        acme_cert_group: "root"
-        acme_cert_dir: "/opt/authentik/certs"
-        acme_create_cert: false
-        acme_key_dir: "/opt/authentik/certs"
-        acme_vault_token: "{{ vault_token }}"
-        acme_reload_cmd: "docker compose -f /path/to/your/authentik/docker-compose.yml restart authentik-server authentik-worker"
+        vault_agent_common_name: "{{ cert_common_name }}"
+        vault_agent_cert_filename: "{{ cert_filename }}"
+        vault_agent_cert_folder: "/opt/authentik/certs"
+        vault_agent_reload_cmd: "docker compose -f /root/authentik/compose.yaml restart"
+        vault_agent_role_id: "{{ authentik_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ authentik_secret_id_response.json.data.secret_id }}"
 
     - name: Install requirements
       ansible.builtin.apt:
@@ -30,14 +81,14 @@
 
     - name: Login and use the resulting token
       community.hashi_vault.vault_login:
-        url: https://vault.homelab.com:8200
+        url: https://vault.homelab.lan:8200
         auth_method: token
         token: "{{ vault_token }}"
       register: login_data
 
     - name: Get Authentik secret
       community.hashi_vault.vault_kv2_get:
-        url: https://vault.homelab.com:8200
+        url: https://vault.homelab.lan:8200
         engine_mount_point: kvv2
         path: authentik
         token: "{{ vault_token }}"
