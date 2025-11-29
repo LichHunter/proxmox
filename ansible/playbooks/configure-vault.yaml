@@ -6,14 +6,14 @@
   roles:
     - zsh
   vars:
-    vault_fqdn: "vault.homelab.com"
+    vault_fqdn: "vault.homelab.lan"
     vault_storage_path: /opt/vault/data
     vault_no_log: "{{ vault_secure_log | bool | default(true) }}"
 
     vault_tls_enabled: "{{ vault_tls | bool | default(true) }}"
     vault_tls_path: "/opt/vault/tls"
     vault_tls_key_file: "/opt/vault/tls/{{ vault_fqdn }}.key"
-    vault_tls_fullchain_file: "{{ vault_tls_path }}/{{ vault_fqdn }}-fullchain.pem"
+    vault_tls_fullchain_file: "{{ vault_tls_path }}/{{ vault_fqdn }}.crt"
     vault_addr: "{{ vault_tls_enabled | ternary('https', 'http') }}://{{ vault_fqdn }}:{{ vault_port | default(8200) }}"
 
     github_org: "LichHunter"
@@ -172,34 +172,49 @@
       register: r_terraform_apply
       no_log: "{{ vault_no_log | bool }}"
 
-    - name: Install acme
-      ansible.builtin.shell: curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online
-      args:
-        creates: /root/.acme.sh/acme.sh
+    - name: Fetch AppRole role_id for Vault service
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_init_data.root_token }}"
+        return_content: true
+      register: vault_role_id_response
 
-    - name: Issue Vault's certificate from its own HTTP ACME endpoint
-      ansible.builtin.command: >
-        /root/.acme.sh/acme.sh --issue --standalone -d "{{ vault_fqdn }}"
-        --server "http://127.0.0.1:{{ vault_port | default(8200) }}/v1/intermediate_ca/acme/directory"
-        --keylength 4096 --insecure
-      args:
-        creates: "/root/.acme.sh/{{ vault_fqdn }}/{{ vault_fqdn }}.cer"
+    - name: Generate AppRole secret_id for Vault service
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_init_data.root_token }}"
+        return_content: true
+      register: vault_secret_id_response
 
-    - name: Install certificate to Vault's TLS directory and set ownership
-      block:
-        - name: Install certificates
-          ansible.builtin.command: >
-            /root/.acme.sh/acme.sh --install-cert -d "{{ vault_fqdn }}"
-            --key-file       "{{ vault_tls_key_file }}"
-            --fullchain-file "{{ vault_tls_fullchain_file }}"
-          args:
-            creates: "{{ vault_tls_fullchain_file }}"
-        - name: Set ownership
-          ansible.builtin.shell:
-            cmd: |
-                chown -R vault:vault /opt/vault/tls
-                chmod 644 "{{ vault_tls_fullchain_file }}"
-                chmod 600 "{{ vault_tls_key_file }}"
+    - name: Configure Vault Agent for Vault service certificates
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "vault.homelab.lan"
+        vault_agent_cert_filename: "{{ vault_fqdn }}"
+        vault_agent_cert_folder: "{{ vault_tls_path }}"
+        vault_agent_reload_cmd: "systemctl reload vault || true"
+        vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
+        vault_agent_vault_addr: "http://127.0.0.1:8200"
+        vault_agent_service_user: "vault"
+        vault_agent_service_group: "vault"
+        vault_agent_cert_perms: "0644"
+        vault_agent_key_perms: "0600"
+
+    - name: Restart Vault Agent to generate initial certificates
+      ansible.builtin.systemd:
+        name: vault-agent
+        state: restarted
+
+    - name: Wait for Vault Agent to generate certificates
+      ansible.builtin.wait_for:
+        path: "{{ vault_tls_path }}/{{ vault_fqdn }}.crt"
+        timeout: 60
 
     - name: Template vault config
       ansible.builtin.template:
@@ -217,7 +232,7 @@
     - name: Re-Unseal Vault over HTTPS
       ansible.builtin.command: "vault operator unseal {{ item }}"
       environment:
-        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+        VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
         VAULT_SKIP_VERIFY: "true"
       loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
       no_log: "{{ vault_no_log | bool }}"
@@ -235,31 +250,32 @@
         state: present
         force_init: true
       environment:
-        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+        VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
         VAULT_TOKEN: "{{ vault_init_data.root_token }}"
         VAULT_SKIP_VERIFY: "true"
       register: r_terraform_apply
       no_log: "{{ vault_no_log | bool }}"
 
-    - name: Setup acme automatic cert rotation
+    - name: Configure Vault Agent for TLS Vault
       ansible.builtin.include_role:
-        name: acme
+        name: vault_agent
       vars:
-        acme_domain: "{{ vault_fqdn }}"
-        acme_hostname: "{{ vault_fqdn }}"
-        acme_home: "/root/.acme.sh"
-        acme_cert_owner: "vault"
-        acme_cert_group: "vault"
-        acme_reload_cmd: "systemctl reload vault"
-        acme_cert_dir: "{{ vault_tls_path }}"
-        acme_key_dir: "{{ vault_tls_path }}"
-        acme_vault_token: "{{ vault_init_data.root_token }}"
+        vault_agent_common_name: "vault.homelab.lan"
+        vault_agent_cert_filename: "{{ vault_fqdn }}"
+        vault_agent_cert_folder: "{{ vault_tls_path }}"
+        vault_agent_reload_cmd: "systemctl reload vault || true"
+        vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
+        vault_agent_service_user: "vault"
+        vault_agent_service_group: "vault"
+        vault_agent_cert_perms: "0644"
+        vault_agent_key_perms: "0600"
 
     - name: Vault status
       register: r_vault_status
       no_log: "{{ vault_no_log | default(true) }}"
       environment:
-        VAULT_ADDR: "https://vault.homelab.com:{{ vault_port | default(8200) }}"
+        VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
       ansible.builtin.command:
         cmd: "vault status -format json"
 

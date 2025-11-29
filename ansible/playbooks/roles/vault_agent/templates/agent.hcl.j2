@@ -24,25 +24,14 @@ auto_auth {
   }
 }
 
-# --- TEMPLATE 1: The Public Certificate (Full Chain) ---
 template {
-  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.crt.ctmpl"
-  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_common_name }}.crt"
-  perms       = "{{ vault_agent_cert_perms }}"
-
-  # Reload service when this changes
+  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt"
   command     = "{{ vault_agent_reload_cmd }}"
 }
 
-# --- TEMPLATE 2: The Private Key ---
 template {
-  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.key.ctmpl"
-  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_common_name }}.key"
-
-  # ONLY root/service should read this.
-  perms       = "{{ vault_agent_key_perms }}"
-
-  # Reload here too. Vault Agent is smart enough not to spam reloads
-  # if both change at once, usually.
+  source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key"
   command     = "{{ vault_agent_reload_cmd }}"
 }

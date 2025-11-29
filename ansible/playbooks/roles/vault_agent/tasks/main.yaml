@@ -72,7 +72,8 @@
 - name: Deploy certificate template
   ansible.builtin.template:
     src: cert.ctmpl.j2
-    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.crt.ctmpl"
+    # LOGIC: Use cert_filename if provided, otherwise default to common_name
+    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt.ctmpl"
     owner: "{{ vault_agent_service_user }}"
     group: "{{ vault_agent_service_group }}"
     mode: '0640'
@@ -81,7 +82,7 @@
 - name: Deploy key template
   ansible.builtin.template:
     src: key.ctmpl.j2
-    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_common_name }}.key.ctmpl"
+    dest: "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key.ctmpl"
     owner: "{{ vault_agent_service_user }}"
     group: "{{ vault_agent_service_group }}"
     mode: '0640'
@@ -112,9 +113,47 @@
     - Reload systemd daemon
     - Restart vault-agent
 
+- name: Ensure PID file directory exists with correct ownership
+  ansible.builtin.file:
+    path: "{{ vault_agent_pid_file | dirname }}"
+    state: directory
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0700'
+
+- name: Fix ownership of existing PID file if it exists
+  ansible.builtin.file:
+    path: "{{ vault_agent_pid_file }}"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0600'
+  failed_when: false
+
 - name: Enable and start Vault Agent service
   ansible.builtin.systemd:
     name: vault-agent
     state: started
     enabled: true
     daemon_reload: true
+
+- name: Wait for Vault Agent to be active
+  ansible.builtin.systemd:
+    name: vault-agent
+  register: vault_agent_status
+  until: vault_agent_status.status.ActiveState == "active"
+  retries: 10
+  delay: 2
+
+- name: Check Vault Agent service health
+  ansible.builtin.command:
+    cmd: systemctl is-active vault-agent
+  register: vault_agent_health
+  changed_when: false
+  failed_when: vault_agent_health.rc != 0
+
+- name: Verify Vault Agent process is running
+  ansible.builtin.command:
+    cmd: pgrep -f "vault agent"
+  register: vault_agent_process
+  changed_when: false
+  failed_when: vault_agent_process.rc != 0

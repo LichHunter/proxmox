@@ -10,6 +10,8 @@ ConditionFileNotEmpty={{ vault_agent_config_dir }}/agent.hcl
 Type=simple
 User={{ vault_agent_service_user }}
 Group={{ vault_agent_service_group }}
+RuntimeDirectory=vault-agent
+RuntimeDirectoryMode=0755
 ExecStart={{ vault_agent_binary_path }} agent -config={{ vault_agent_config_dir }}/agent.hcl
 ExecReload=/bin/kill --signal HUP $MAINPID
 KillMode=process

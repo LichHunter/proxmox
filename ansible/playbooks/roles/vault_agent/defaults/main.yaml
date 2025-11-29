@@ -2,7 +2,7 @@
 # roles/vault_agent/defaults/main.yaml
 
 # Vault server address
-vault_agent_vault_addr: "https://vault.homelab.com:8200"
+vault_agent_vault_addr: "https://vault.homelab.lan:8200"
 
 # Root CA bootstrap
 vault_agent_bootstrap_root_ca: true
@@ -17,7 +17,7 @@ vault_agent_remove_secret_id_after_reading: false
 # Vault Agent paths
 vault_agent_config_dir: "/etc/vault"
 vault_agent_template_dir: "/etc/vault/templates"
-vault_agent_pid_file: "/var/run/vault-agent.pid"
+vault_agent_pid_file: "/var/run/vault-agent/agent.pid"
 vault_agent_token_sink_path: "/tmp/vault-token"
 
 # PKI configuration

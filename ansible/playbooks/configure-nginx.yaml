@@ -6,6 +6,28 @@
   roles:
     - zsh
 
+  vars:
+    cert_common_name: "*.homelab.com"
+    cert_filename: "wildcard.homelab.com"
+
+    # 2. DEFINE THE BACKENDS (Using .lan)
+    nginx_proxy_services:
+      - server_name: vault.homelab.com
+        backend_host: vault.homelab.lan
+        backend_port: 8200
+        backend_protocol: https
+
+      # Uncomment these when you are ready
+      # - server_name: grafana.homelab.com
+      #   backend_host: grafana.homelab.lan
+      #   backend_port: 3000
+      #   backend_protocol: https # (Make sure Grafana has its .lan cert first!)
+
+      # - server_name: authentik.homelab.com
+      #   backend_host: authentik.homelab.lan
+      #   backend_port: 9443
+      #   backend_protocol: https
+
   tasks:
     - name: Install nginx
       ansible.builtin.apt:
@@ -21,15 +43,16 @@
         group: root
         mode: '0755'
 
+    # --- TRUST BOOTSTRAP ---
     - name: Check if Vault root CA already exists
       ansible.builtin.stat:
         path: /usr/local/share/ca-certificates/vault-root-ca.crt
       register: root_ca_stat
 
-    - name: Download Vault root CA certificate
+    - name: Download Vault root CA certificate (Internal LAN)
       when: not root_ca_stat.stat.exists
       ansible.builtin.uri:
-        url: "https://vault.homelab.com:8200/v1/root_ca/ca/pem"
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
         method: GET
         validate_certs: false
         return_content: true
@@ -43,17 +66,17 @@
 
     - name: Fetch AppRole role_id from Vault
       ansible.builtin.uri:
-        url: "https://vault.homelab.com:8200/v1/auth/approle/role/nginx/role-id"
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/nginx/role-id"
         method: GET
         headers:
           X-Vault-Token: "{{ vault_token }}"
-        validate_certs: false
+        validate_certs: true
         return_content: true
       register: nginx_role_id_response
 
     - name: Generate AppRole secret_id from Vault
       ansible.builtin.uri:
-        url: "https://vault.homelab.com:8200/v1/auth/approle/role/nginx/secret-id"
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/nginx/secret-id"
         method: POST
         headers:
           X-Vault-Token: "{{ vault_token }}"
@@ -61,15 +84,39 @@
         return_content: true
       register: nginx_secret_id_response
 
-    - name: Configure Vault Agent for certificate management
+    - name: Configure Vault Agent for Wildcard Certificate
       ansible.builtin.include_role:
         name: vault_agent
       vars:
-        vault_agent_common_name: "nginx.homelab.com"
+        # Request *.homelab.com
+        vault_agent_common_name: "{{ cert_common_name }}"
+        # Pass the clean filename so we don't get files with '*' in them
+        vault_agent_cert_filename: "{{ cert_filename }}"
+        vault_agent_cert_folder: "/etc/nginx/ssl"
         vault_agent_reload_cmd: "systemctl reload nginx"
         vault_agent_role_id: "{{ nginx_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ nginx_secret_id_response.json.data.secret_id }}"
-        vault_agent_cert_folder: "/etc/nginx/ssl"
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Deploy nginx proxy site configurations
+      ansible.builtin.template:
+        src: templates/nginx-proxy-site.conf.j2
+        dest: "/etc/nginx/sites-available/{{ item.server_name }}.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ nginx_proxy_services }}"
+
+    - name: Enable nginx proxy sites
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ item.server_name }}.conf"
+        dest: "/etc/nginx/sites-enabled/{{ item.server_name }}.conf"
+        state: link
+      loop: "{{ nginx_proxy_services }}"
 
     - name: Enable and start nginx service
       ansible.builtin.systemd:
