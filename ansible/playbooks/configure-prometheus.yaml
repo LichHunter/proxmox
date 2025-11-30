@@ -13,6 +13,11 @@
     cert_folder: "/etc/prometheus/certs"
     cert_filename: "prometheus.homelab.lan"
     domain: "homelab.com"
+    prometheus_version: "2.55.1"
+    prometheus_arch: "linux-amd64"
+    prometheus_install_dir: "/usr/local/bin"
+    prometheus_config_dir: "/etc/prometheus"
+    prometheus_data_dir: "/var/lib/prometheus"
     scrape_targets:
       - "nginx"
       - "authentik"
@@ -72,33 +77,108 @@
         vault_agent_service_user: "{{ service_user }}"
         vault_agent_service_group: "{{ service_group }}"
 
-    - name: Install Prometheus
-      ansible.builtin.apt:
-        name: prometheus
+    - name: Check if Prometheus group exists
+      ansible.builtin.getent:
+        database: group
+        key: "{{ service_group }}"
+        fail_key: false
+      register: prometheus_group_check
+
+    - name: Create Prometheus system group
+      ansible.builtin.group:
+        name: "{{ service_group }}"
+        system: true
         state: present
-        update_cache: true
+      when: prometheus_group_check.ansible_facts.getent_group[service_group] is not defined
+
+    - name: Check if Prometheus user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ service_user }}"
+        fail_key: false
+      register: prometheus_user_check
+
+    - name: Create Prometheus system user
+      ansible.builtin.user:
+        name: "{{ service_user }}"
+        group: "{{ service_group }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ prometheus_data_dir }}"
+        create_home: false
+        state: present
+      when: prometheus_user_check.ansible_facts.getent_passwd[service_user] is not defined
+
+    - name: Create Prometheus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_group }}"
+        mode: '0755'
+      loop:
+        - "{{ prometheus_config_dir }}"
+        - "{{ prometheus_data_dir }}"
+        - "{{ cert_folder }}"
+
+    - name: Download Prometheus binary
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}.tar.gz"
+        dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract Prometheus binary
+      ansible.builtin.unarchive:
+        src: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+        creates: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/prometheus"
+
+    - name: Install Prometheus binaries
+      ansible.builtin.copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/{{ item }}"
+        dest: "{{ prometheus_install_dir }}/{{ item }}"
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Clean up downloaded files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+        - "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}"
 
     - name: Configure Prometheus
       ansible.builtin.template:
         src: templates/prometheus.yaml.j2
-        dest: /etc/prometheus/prometheus.yaml
-        owner: prometheus
-        group: prometheus
+        dest: "{{ prometheus_config_dir }}/prometheus.yaml"
+        owner: "{{ service_user }}"
+        group: "{{ service_group }}"
         mode: '0644'
+      notify: restart_prometheus
 
     - name: Configure Prometheus Web
       ansible.builtin.template:
         src: templates/prometheus-web.yaml.j2
-        dest: /etc/prometheus/web-config.yaml
-        owner: prometheus
-        group: prometheus
+        dest: "{{ prometheus_config_dir }}/web-config.yaml"
+        owner: "{{ service_user }}"
+        group: "{{ service_group }}"
         mode: '0644'
+      notify: restart_prometheus
 
-    - name: Update Prometheus Service Arguments
-      ansible.builtin.lineinfile:
-        path: /etc/default/prometheus
-        regexp: '^ARGS='
-        line: 'ARGS="--config.file=/etc/prometheus/prometheus.yaml --web.config.file=/etc/prometheus/web-config.yaml"'
+    - name: Install Prometheus systemd service
+      ansible.builtin.template:
+        src: templates/prometheus.service.j2
+        dest: /etc/systemd/system/prometheus.service
+        owner: root
+        group: root
+        mode: '0644'
       notify: restart_prometheus
 
     - name: Ensure Prometheus is enabled and running
