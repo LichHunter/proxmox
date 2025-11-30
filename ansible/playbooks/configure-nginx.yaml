@@ -9,19 +9,16 @@
   vars:
     cert_common_name: "*.homelab.com"
     cert_filename: "wildcard.homelab.com"
-
-    # 2. DEFINE THE BACKENDS (Using .lan)
     nginx_proxy_services:
       - server_name: vault.homelab.com
         backend_host: vault.homelab.lan
         backend_port: 8200
         backend_protocol: https
 
-      # Uncomment these when you are ready
-      # - server_name: grafana.homelab.com
-      #   backend_host: grafana.homelab.lan
-      #   backend_port: 3000
-      #   backend_protocol: https # (Make sure Grafana has its .lan cert first!)
+      - server_name: grafana.homelab.com
+        backend_host: grafana.homelab.lan
+        backend_port: 3000
+        backend_protocol: https
 
       - server_name: authentik.homelab.com
         backend_host: authentik.homelab.lan

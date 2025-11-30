@@ -1,9 +1,28 @@
 [server]
 http_addr =
 http_port = 3000
-domain = {{ acme_domain }}
-root_url = https://{{ acme_domain }}:3000
-cert_key = {{ acme_key_dir }}/{{ acme_hostname }}.key
-cert_file = {{ acme_cert_dir }}/{{ acme_hostname }}.crt
+domain = {{ domain }}
+root_url = https://{{ domain }}
+cert_key = {{ key_dir }}/{{ hostname }}.key
+cert_file = {{ cert_dir }}/{{ hostname }}.crt
 enforce_domain = False
 protocol = https
+
+{% if grafana_authentik_enabled %}
+[auth]
+signout_redirect_url = https://authentik.homelab.com/application/o/grafana/end-session/
+# Optionally enable auto-login
+oauth_auto_login = true
+
+[auth.generic_oauth]
+name = authentik
+enabled = true
+client_id = {{ authentik_grafana_id }}
+client_secret = {{ authentik_grafana_secret }}
+scopes = openid email profile
+auth_url = https://authentik.homelab.com/application/o/authorize/
+token_url = https://authentik.homelab.com/application/o/token/
+api_url = https://authentik.homelab.com/application/o/userinfo/
+# Optionally map user groups to Grafana roles
+role_attribute_path = contains(groups, 'Grafana Admins') && 'Admin' || contains(groups, 'Grafana Editors') && 'Editor' || 'Viewer'
+{% endif %}
