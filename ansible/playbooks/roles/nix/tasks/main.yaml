@@ -1,0 +1,69 @@
+---
+- name: Install required packages for Nix installation
+  ansible.builtin.apt:
+    name:
+      - curl
+      - xz-utils
+      - ca-certificates
+      - sudo
+    state: present
+    update_cache: true
+
+- name: Check if Nix is already installed
+  ansible.builtin.stat:
+    path: /nix/var/nix/profiles/default
+  register: nix_installed
+
+- name: Download Nix installer script
+  when: not nix_installed.stat.exists
+  ansible.builtin.get_url:
+    url: https://nixos.org/nix/install
+    dest: /tmp/nix-install.sh
+    mode: '0755'
+
+- name: Run Nix multi-user installation
+  when: not nix_installed.stat.exists
+  ansible.builtin.command:
+    cmd: sh /tmp/nix-install.sh --daemon --yes
+  changed_when: true
+  environment:
+    USER: root
+
+- name: Remove Nix installer script
+  when: not nix_installed.stat.exists
+  ansible.builtin.file:
+    path: /tmp/nix-install.sh
+    state: absent
+
+- name: Ensure nix-daemon is enabled and started
+  ansible.builtin.systemd:
+    name: nix-daemon.service
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Configure Nix for CI/build usage
+  ansible.builtin.lineinfile:
+    path: /etc/nix/nix.conf
+    line: "{{ item }}"
+    create: true
+    mode: '0644'
+  loop:
+    - "build-users-group = nixbld"
+    - "max-jobs = auto"
+    - "sandbox = true"
+    - "experimental-features = nix-command flakes"
+  notify: restart nix-daemon
+
+- name: Ensure Nix profile script exists in /etc/profile.d
+  ansible.builtin.stat:
+    path: /etc/profile.d/nix.sh
+  register: nix_profile
+
+- name: Create Nix profile script if missing
+  when: not nix_profile.stat.exists and nix_installed.stat.exists
+  ansible.builtin.copy:
+    src: /nix/var/nix/profiles/default/etc/profile.d/nix.sh
+    dest: /etc/profile.d/nix.sh
+    remote_src: true
+    mode: '0644'

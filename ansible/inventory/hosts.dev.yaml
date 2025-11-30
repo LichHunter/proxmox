@@ -59,6 +59,13 @@ all:
           ansible_user: ansible
           ansible_ssh_private_key_file: ~/.ssh/proxmox_dev_ansible_private_key
           ansible_proxmox_pct_vm_id: 1243
+        gitlab_runner:
+          ansible_host: 192.168.1.53
+          proxmox_vmid: 1244
+          ansible_connection: community.proxmox.proxmox_pct_remote
+          ansible_user: ansible
+          ansible_ssh_private_key_file: ~/.ssh/proxmox_dev_ansible_private_key
+          ansible_proxmox_pct_vm_id: 1244
     proxmox:
       hosts:
         proxmox-1:

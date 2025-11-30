@@ -1,0 +1,110 @@
+---
+- name: Configure GitLab Runner
+  hosts: gitlab_runner
+  gather_facts: true
+  become: false
+
+  roles:
+    - zsh
+    - nix
+
+  vars:
+    cert_common_name: "gitlab-runner.homelab.lan"
+    cert_filename: "gitlab-runner.homelab.lan"
+    cert_dir: "/etc/gitlab-runner"
+
+  tasks:
+    - name: Verify connection to the container
+      ansible.builtin.ping:
+
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate (Internal LAN)
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/gitlab-runner/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: gitlab_runner_role_id_response
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/gitlab-runner/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: gitlab_runner_secret_id_response
+
+    - name: Ensure GitLab Runner certs directory exists
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure Vault Agent for GitLab Runner Certificate
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "{{ cert_common_name }}"
+        vault_agent_cert_filename: "{{ cert_filename }}"
+        vault_agent_cert_folder: "{{ cert_dir }}"
+        vault_agent_reload_service: "gitlab-runner.service"
+        vault_agent_role_id: "{{ gitlab_runner_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ gitlab_runner_secret_id_response.json.data.secret_id }}"
+        vault_agent_service_user: "gitlab-runner"
+        vault_agent_service_group: "gitlab-runner"
+
+    - name: Add GitLab official repository
+      ansible.builtin.deb822_repository:
+        name: gitlab-runner
+        types: [deb]
+        uris: "https://packages.gitlab.com/runner/gitlab-runner/debian/"
+        components: [main]
+        signed_by: https://packages.gitlab.com/runner/gitlab-runner/gpgkey
+        state: present
+        enabled: true
+        suites: "{{ ansible_facts.distribution_release }}"
+
+    - name: Install GitLab Runner
+      ansible.builtin.apt:
+        name:
+          - gitlab-runner
+        state: present
+        update_cache: true
+
+    - name: Ensure gitlab-runner user can access Nix
+      ansible.builtin.user:
+        name: gitlab-runner
+        groups: nixbld
+        append: true
+
+    - name: Enable and start GitLab Runner service
+      ansible.builtin.systemd:
+        name: gitlab-runner
+        state: started
+        enabled: true
+        daemon_reload: true

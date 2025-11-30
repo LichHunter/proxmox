@@ -446,6 +446,57 @@ resource "proxmox_virtual_environment_container" "prometheus_container" {
   }
 }
 
+resource "proxmox_virtual_environment_container" "gitlab_runner_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1244
+  tags         = ["ansible_managed", "gitlab_runner"]
+  unprivileged = true
+
+  cpu {
+    cores = 8
+  }
+
+  memory {
+    dedicated = 8192
+  }
+
+  disk {
+    datastore_id = "local-lvm"
+    size         = 100
+  }
+
+  initialization {
+    hostname = "gitlab-runner"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.50/24"
+        gateway = "192.168.100.1"
+      }
+    }
+
+    dns {
+      servers = ["192.168.100.1"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"

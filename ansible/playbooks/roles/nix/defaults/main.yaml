@@ -1,0 +1,12 @@
+---
+# Nix installation defaults
+# These can be overridden in playbooks if needed
+
+# Enable experimental features (nix-command and flakes are commonly needed in CI)
+nix_experimental_features: "nix-command flakes"
+
+# Sandbox builds for security
+nix_sandbox: true
+
+# Auto-detect optimal number of build jobs
+nix_max_jobs: "auto"
