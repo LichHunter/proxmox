@@ -25,3 +25,11 @@ node_exporter_enabled_collectors:
 
 # Disabled collectors (customize as needed)
 node_exporter_disabled_collectors: []
+
+# Nginx Prometheus Exporter (optional)
+node_exporter_nginx_enabled: false
+node_exporter_nginx_exporter_version: "1.3.0"
+node_exporter_nginx_exporter_arch: "linux-amd64"
+node_exporter_nginx_stub_status_url: "http://127.0.0.1:8080/stub_status"
+node_exporter_nginx_exporter_port: "9113"
+node_exporter_nginx_exporter_listen_address: "0.0.0.0:9113"

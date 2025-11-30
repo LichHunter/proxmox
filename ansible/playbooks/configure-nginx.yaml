@@ -45,6 +45,26 @@
         group: root
         mode: '0755'
 
+    - name: Enable Nginx stub_status for prometheus monitoring
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/stub_status.conf
+        content: |
+          server {
+              listen 127.0.0.1:8080;
+              server_name 127.0.0.1;
+
+              location /stub_status {
+                  stub_status on;
+                  access_log off;
+                  allow 127.0.0.1;
+                  deny all;
+              }
+          }
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload_nginx
+
     - name: Check if Vault root CA already exists
       ansible.builtin.stat:
         path: /usr/local/share/ca-certificates/vault-root-ca.crt
@@ -131,3 +151,10 @@
       vars:
         node_exporter_cert_folder: "/etc/nginx/ssl"
         node_exporter_cert_filename: "{{ cert_filename }}"
+        node_exporter_nginx_enabled: true
+
+  handlers:
+    - name: reload_nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded

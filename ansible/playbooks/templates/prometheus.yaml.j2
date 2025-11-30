@@ -17,5 +17,14 @@ scrape_configs:
     static_configs:
       - targets:
 {% for target in scrape_targets %}
-        - '{{ target }}.{{ scrape_target_hostname }}:9100'
+        - '{{ target }}.{{ domain }}:9100'
 {% endfor %}
+
+  # Scrape Nginx metrics (if nginx is in scrape_targets)
+{% if 'nginx' in scrape_targets %}
+  - job_name: 'nginx_metrics'
+    scheme: http
+    static_configs:
+      - targets:
+        - 'nginx.{{ domain }}:9113'
+{% endif %}

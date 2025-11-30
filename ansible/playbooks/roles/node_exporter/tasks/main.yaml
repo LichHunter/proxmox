@@ -105,3 +105,63 @@
     state: started
     enabled: true
     daemon_reload: true
+
+# Nginx Prometheus Exporter (optional)
+- name: Check if nginx_exporter binary exists
+  ansible.builtin.stat:
+    path: "{{ node_exporter_install_dir }}/nginx-prometheus-exporter"
+  register: nginx_exporter_binary
+  when: node_exporter_nginx_enabled
+
+- name: Download nginx-prometheus-exporter binary
+  ansible.builtin.get_url:
+    url: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v{{ node_exporter_nginx_exporter_version }}/nginx-prometheus-exporter_{{ node_exporter_nginx_exporter_version }}_linux_amd64.tar.gz"
+    dest: "/tmp/nginx-prometheus-exporter-{{ node_exporter_nginx_exporter_version }}.tar.gz"
+    mode: '0644'
+  when: node_exporter_nginx_enabled and not nginx_exporter_binary.stat.exists
+
+- name: Extract nginx-prometheus-exporter binary
+  ansible.builtin.unarchive:
+    src: "/tmp/nginx-prometheus-exporter-{{ node_exporter_nginx_exporter_version }}.tar.gz"
+    dest: "/tmp"
+    remote_src: true
+    creates: "/tmp/nginx-prometheus-exporter"
+  when: node_exporter_nginx_enabled and not nginx_exporter_binary.stat.exists
+
+- name: Install nginx-prometheus-exporter binary
+  ansible.builtin.copy:
+    src: "/tmp/nginx-prometheus-exporter"
+    dest: "{{ node_exporter_install_dir }}/nginx-prometheus-exporter"
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+  when: node_exporter_nginx_enabled and not nginx_exporter_binary.stat.exists
+  notify: restart_nginx_exporter
+
+- name: Clean up nginx-prometheus-exporter downloaded files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/nginx-prometheus-exporter-{{ node_exporter_nginx_exporter_version }}.tar.gz"
+    - "/tmp/nginx-prometheus-exporter"
+  when: node_exporter_nginx_enabled and not nginx_exporter_binary.stat.exists
+
+- name: Install nginx_exporter systemd service
+  ansible.builtin.template:
+    src: nginx_exporter.service.j2
+    dest: /etc/systemd/system/nginx_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  when: node_exporter_nginx_enabled
+  notify: restart_nginx_exporter
+
+- name: Ensure nginx_exporter is enabled and running
+  ansible.builtin.systemd:
+    name: nginx_exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: node_exporter_nginx_enabled
