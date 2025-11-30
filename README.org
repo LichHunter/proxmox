@@ -1,5 +1,108 @@
 #+title: Readme
 
+* Overview
+This project contains Terraform and Ansible scripts to setup private network behind Opnsense Firewall.
+Services include:
+- Hashicorp Vault
+- Authentik
+- Prometheus
+- Grafana
+- Jumpbox (Bastion)
+- Mongodb
+* Installation
+Lets leave out firewall setup for now as I don't remember how I configured it and assume that firewall has been setup.
+
+So steps would be these:
+1. Run terraform to create LXC containers
+  #+begin_src bash
+tofu init
+
+tofu plan
+
+tofu apply
+  #+end_src
+2. Configure Proxmox
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/setup-proxmox-host.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+3. Configure Jumpbox
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-jumpbox.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+4. Setup SSH proxy
+   This will allow you to run terraform apply scripts from your machine, outside of private network
+  #+begin_src bash
+ssh -D 9090 developer@jumpbox -N
+  #+end_src
+5. Configure Mongodb
+   You will need this as for now Vault has resource that requires Mongodb connection to be available
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-mongodb.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+6. Configure Hashicorp Vault machine
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-vault.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+7. Create Authentik secrets
+   You will need to login to the Vault (either webui or cli) and create two screts for Authentik - Postgress database password and Authentik secret
+  #+begin_src bash
+  vault kv put kvv2/authentik \
+    pg_pass="$(openssl rand -base64 36 | tr -d '\n')" \
+    authentik_secret_key="$(openssl rand -base64 60 | tr -d '\n')"
+  #+end_src
+8. Configure Authentik machine
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-authentik.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+9. Configure Authentik service using terraform
+   1. Get Authentik repo
+     #+begin_src bash
+git clone git@github.com:LichHunter/Proxmox-Authentik.git
+     #+end_src
+   2. Run terraform
+     #+begin_src bash
+export HTTPS_PROXY="socks5h://127.0.0.1:9090"
+
+tofu init
+
+tofu plan
+
+tofu apply
+     #+end_src
+   3. Remember output variables, you will need them in you ansible vars
+10. Configure Prometheus
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-authentik.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+11. Configure Grafana
+  #+begin_src bash
+ansible-playbook -i inventory/hosts.dev.yaml playbooks/configure-grafana.yaml --extra-vars "@vars/dev.yaml"
+  #+end_src
+** Ansible vars example
+#+begin_src yaml
+---
+users:
+  admin:
+    name: admin
+    password: test1234
+  vault:
+    name: test
+    password: test1234
+  developer:
+    public_key: <<your_public_key>>
+vault_tls: false
+vault_no_log: false
+vault_token: <<get_it_after_vault_configuration_run>>
+
+github_access_token: <<token_to_access_vault_terraform_repo>>
+
+mongodb_vault_username: "vault"
+mongodb_vault_password: "vault_1234"
+
+grafana_authentik_enabled: true
+authentik_grafana_id: <<get_it_after_terraform_authenktik_run>>
+authentik_grafana_secret: <<get_it_after_terraform_authenktik_run>>
+#+end_src
 * Firewall
 ** Manual Installation Procedure
 The OS must be manually installed to the virtual hard disk. This is a one-time operation.
