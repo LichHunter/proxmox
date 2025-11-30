@@ -17,5 +17,5 @@ scrape_configs:
     static_configs:
       - targets:
 {% for target in scrape_targets %}
-        - '{{ target }}.{{ domain }}:9100'
+        - '{{ target }}.{{ scrape_target_hostname }}:9100'
 {% endfor %}

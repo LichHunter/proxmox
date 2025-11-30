@@ -375,7 +375,7 @@ resource "proxmox_virtual_environment_container" "nginx_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }

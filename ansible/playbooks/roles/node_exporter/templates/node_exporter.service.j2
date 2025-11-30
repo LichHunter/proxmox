@@ -1,0 +1,42 @@
+[Unit]
+Description=Prometheus Node Exporter
+Documentation=https://github.com/prometheus/node_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ node_exporter_service_user }}
+Group={{ node_exporter_service_group }}
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart={{ node_exporter_install_dir }}/node_exporter \
+  --web.config.file={{ node_exporter_config_dir }}/web-config.yaml \
+  --web.listen-address={{ node_exporter_listen_address }} \
+{% for collector in node_exporter_enabled_collectors %}
+  --collector.{{ collector }} \
+{% endfor %}
+{% for collector in node_exporter_disabled_collectors %}
+  --no-collector.{{ collector }} \
+{% endfor %}
+  --collector.filesystem.mount-points-exclude='^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)' \
+  --collector.filesystem.fs-types-exclude='^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$'
+
+SyslogIdentifier=node_exporter
+Restart=always
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

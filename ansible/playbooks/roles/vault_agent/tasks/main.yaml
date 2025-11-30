@@ -4,6 +4,7 @@
     name: "{{ vault_agent_service_user }}"
     shell: /bin/false
     system: true
+  when: not vault_agent_service_user == 'root'
 
 - name: Install required packages
   ansible.builtin.apt:

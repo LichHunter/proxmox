@@ -25,6 +25,11 @@
         backend_port: 9443
         backend_protocol: https
 
+      - server_name: prometheus.homelab.com
+        backend_host: prometheus.homelab.lan
+        backend_port: 9090
+        backend_protocol: https
+
   tasks:
     - name: Install nginx
       ansible.builtin.apt:
@@ -89,7 +94,7 @@
         # Pass the clean filename so we don't get files with '*' in them
         vault_agent_cert_filename: "{{ cert_filename }}"
         vault_agent_cert_folder: "/etc/nginx/ssl"
-        vault_agent_reload_cmd: "systemctl reload nginx"
+        vault_agent_reload_service: "nginx.service"
         vault_agent_role_id: "{{ nginx_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ nginx_secret_id_response.json.data.secret_id }}"
 
@@ -119,3 +124,10 @@
         name: nginx
         state: started
         enabled: true
+
+    - name: Install and configure node_exporter
+      ansible.builtin.include_role:
+        name: node_exporter
+      vars:
+        node_exporter_cert_folder: "/etc/nginx/ssl"
+        node_exporter_cert_filename: "{{ cert_filename }}"
