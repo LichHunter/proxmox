@@ -1,0 +1,41 @@
+# Nginx direct access server block for monitoring
+# Serves node_exporter and nginx_exporter metrics over HTTPS
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name nginx.homelab.lan;
+
+    # SSL certificate for nginx.homelab.lan
+    ssl_certificate /etc/nginx/ssl/nginx.homelab.lan.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.homelab.lan.key;
+
+    # SSL security settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    # Node exporter metrics (system metrics)
+    location /metrics {
+        proxy_pass https://127.0.0.1:9100/metrics;
+        proxy_ssl_verify off;  # localhost connection
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Nginx exporter metrics (nginx stats)
+    location /nginx_metrics {
+        proxy_pass http://127.0.0.1:9113/metrics;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Deny all other requests
+    location / {
+        return 404;
+    }
+}

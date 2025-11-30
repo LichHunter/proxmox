@@ -13,7 +13,7 @@
     cert_folder: "/etc/prometheus/certs"
     cert_filename: "prometheus.homelab.lan"
     domain: "homelab.com"
-    scrape_target_hostname: "homelab.com"
+    scrape_target_hostname: "homelab.lan"
     prometheus_version: "2.55.1"
     prometheus_arch: "linux-amd64"
     prometheus_install_dir: "/usr/local/bin"

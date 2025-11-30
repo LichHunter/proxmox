@@ -76,23 +76,46 @@
     mode: '0640'
   notify: Restart vault-agent
 
-- name: Deploy certificate template
+- name: Deploy certificate templates (multi-cert mode)
+  ansible.builtin.template:
+    src: cert-multi.ctmpl.j2
+    dest: "{{ vault_agent_template_dir }}/{{ item.filename }}.crt.ctmpl"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0640'
+  loop: "{{ vault_agent_certificates }}"
+  when: vault_agent_certificates | length > 0
+  notify: Restart vault-agent
+
+- name: Deploy key templates (multi-cert mode)
+  ansible.builtin.template:
+    src: key-multi.ctmpl.j2
+    dest: "{{ vault_agent_template_dir }}/{{ item.filename }}.key.ctmpl"
+    owner: "{{ vault_agent_service_user }}"
+    group: "{{ vault_agent_service_group }}"
+    mode: '0640'
+  loop: "{{ vault_agent_certificates }}"
+  when: vault_agent_certificates | length > 0
+  notify: Restart vault-agent
+
+- name: Deploy certificate template (legacy mode)
   ansible.builtin.template:
     src: cert.ctmpl.j2
-    # LOGIC: Use cert_filename if provided, otherwise default to common_name
     dest: "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt.ctmpl"
     owner: "{{ vault_agent_service_user }}"
     group: "{{ vault_agent_service_group }}"
     mode: '0640'
+  when: vault_agent_certificates | length == 0
   notify: Restart vault-agent
 
-- name: Deploy key template
+- name: Deploy key template (legacy mode)
   ansible.builtin.template:
     src: key.ctmpl.j2
     dest: "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key.ctmpl"
     owner: "{{ vault_agent_service_user }}"
     group: "{{ vault_agent_service_group }}"
     mode: '0640'
+  when: vault_agent_certificates | length == 0
   notify: Restart vault-agent
 
 - name: Deploy AppRole credentials

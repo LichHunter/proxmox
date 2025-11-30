@@ -105,14 +105,18 @@
         return_content: true
       register: nginx_secret_id_response
 
-    - name: Configure Vault Agent for Wildcard Certificate
+    - name: Configure Vault Agent for Multiple Certificates
       ansible.builtin.include_role:
         name: vault_agent
       vars:
-        # Request *.homelab.com
-        vault_agent_common_name: "{{ cert_common_name }}"
-        # Pass the clean filename so we don't get files with '*' in them
-        vault_agent_cert_filename: "{{ cert_filename }}"
+        # Multi-cert mode: request both wildcard and nginx-specific certificates
+        vault_agent_certificates:
+          - common_name: "{{ cert_common_name }}"
+            filename: "{{ cert_filename }}"
+            ttl: "24h"
+          - common_name: "nginx.homelab.lan"
+            filename: "nginx.homelab.lan"
+            ttl: "24h"
         vault_agent_cert_folder: "/etc/nginx/ssl"
         vault_agent_reload_service: "nginx.service"
         vault_agent_role_id: "{{ nginx_role_id_response.json.data.role_id }}"
@@ -139,6 +143,22 @@
         state: link
       loop: "{{ nginx_proxy_services }}"
 
+    - name: Deploy nginx direct-access server configuration
+      ansible.builtin.template:
+        src: templates/nginx-direct-access.conf.j2
+        dest: /etc/nginx/sites-available/nginx-direct.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: reload_nginx
+
+    - name: Enable nginx direct-access site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/nginx-direct.conf
+        dest: /etc/nginx/sites-enabled/nginx-direct.conf
+        state: link
+      notify: reload_nginx
+
     - name: Enable and start nginx service
       ansible.builtin.systemd:
         name: nginx
@@ -150,7 +170,7 @@
         name: node_exporter
       vars:
         node_exporter_cert_folder: "/etc/nginx/ssl"
-        node_exporter_cert_filename: "{{ cert_filename }}"
+        node_exporter_cert_filename: "nginx.homelab.lan"
         node_exporter_nginx_enabled: true
 
   handlers:

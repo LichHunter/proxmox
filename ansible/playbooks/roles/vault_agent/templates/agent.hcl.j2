@@ -24,9 +24,36 @@ auto_auth {
   }
 }
 
+{% if vault_agent_certificates | length > 0 %}
+# Multi-certificate mode
+{% for cert in vault_agent_certificates %}
+template {
+  source      = "{{ vault_agent_template_dir }}/{{ cert.filename }}.crt.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ cert.filename }}.crt"
+  perms       = "{{ vault_agent_cert_perms }}"
+  exec {
+    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    timeout = "30s"
+  }
+}
+
+template {
+  source      = "{{ vault_agent_template_dir }}/{{ cert.filename }}.key.ctmpl"
+  destination = "{{ vault_agent_cert_folder }}/{{ cert.filename }}.key"
+  perms       = "{{ vault_agent_key_perms }}"
+  exec {
+    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    timeout = "30s"
+  }
+}
+
+{% endfor %}
+{% else %}
+# Legacy single-certificate mode
 template {
   source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt.ctmpl"
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt"
+  perms       = "{{ vault_agent_cert_perms }}"
   exec {
     command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
     timeout = "30s"
@@ -36,8 +63,10 @@ template {
 template {
   source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key.ctmpl"
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key"
+  perms       = "{{ vault_agent_key_perms }}"
   exec {
     command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
     timeout = "30s"
   }
 }
+{% endif %}

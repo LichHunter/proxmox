@@ -29,8 +29,24 @@ vault_agent_cert_folder: "/etc/ssl/certs"
 vault_agent_cert_perms: "0644"
 vault_agent_key_perms: "0600"
 
-# Common name and reload command must be provided from playbook level
-# vault_agent_common_name: ""  # REQUIRED
+# Certificate configuration - Two modes supported:
+# Mode 1 (Legacy): Single certificate using vault_agent_common_name and vault_agent_cert_filename
+# Mode 2 (Multi-cert): Multiple certificates using vault_agent_certificates list
+#
+# vault_agent_common_name: ""  # REQUIRED for Mode 1
+# vault_agent_cert_filename: "" # OPTIONAL for Mode 1 (defaults to common_name)
+#
+# vault_agent_certificates: []  # REQUIRED for Mode 2
+#   Example:
+#   - common_name: "*.homelab.com"
+#     filename: "wildcard.homelab.com"
+#     ttl: "24h"  # optional, defaults to vault_agent_cert_ttl
+#   - common_name: "nginx.homelab.lan"
+#     filename: "nginx.homelab.lan"
+
+vault_agent_certificates: []  # Empty list = use legacy Mode 1
+
+# Reload command must be provided from playbook level
 # vault_agent_reload_service: "" # REQUIRED
 vault_agent_reload_cmd: "/usr/bin/systemctl reload {{ vault_agent_reload_service }}"
 vault_agent_sudo_reload_cmd: "sudo {{ vault_agent_reload_cmd }}"

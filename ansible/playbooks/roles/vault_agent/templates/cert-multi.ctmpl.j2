@@ -1,0 +1,4 @@
+{% raw %}{{- with secret "{% endraw %}{{ vault_agent_pki_role_path }}{% raw %}" "common_name={% endraw %}{{ item.common_name }}{% raw %}" "ttl={% endraw %}{{ item.ttl | default(vault_agent_cert_ttl) }}{% raw %}" -}}
+{{ .Data.certificate }}
+{{ .Data.issuing_ca }}
+{{- end -}}{% endraw %}
