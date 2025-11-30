@@ -34,7 +34,7 @@
         path: /opt/ansible-pct/.ssh/ansible
         type: ed25519
         comment: 'ansible'
-        #force: true
+        # force: true
         mode: '0600'
         owner: ansible
         group: ansible
@@ -43,7 +43,7 @@
       ansible.builtin.copy:
         src: /opt/ansible-pct/.ssh/ansible.pub
         dest: /opt/ansible-pct/.ssh/authorized_keys
-        remote_src: yes
+        remote_src: true
         owner: ansible
         group: ansible
         mode: '0600'
@@ -60,7 +60,7 @@
       ansible.builtin.fetch:
         src: /opt/ansible-pct/.ssh/ansible
         dest: "~/.ssh/proxmox_{{ env }}_ansible_private_key"
-        flat: yes
+        flat: true
         fail_on_missing: true
 
     - name: Clean up generated SSH keys

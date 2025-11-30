@@ -1,0 +1,32 @@
+---
+# Ansible-lint configuration for homelab environment
+# This file documents intentional rule exceptions
+
+skip_list:
+  # Long URLs in get_url/uri tasks - breaking them reduces readability
+  - yaml[line-length]
+
+  # Default file permissions (0644/0755) are acceptable for homelab
+  # In production, explicit mode parameters should be added
+  - risky-file-permissions
+
+  # Git repos intentionally use latest for oh-my-zsh and plugins
+  # Using latest ensures users get current shell enhancements
+  - latest[git]
+
+  # run_once warning doesn't apply - not using free strategy
+  - run-once[task]
+
+warn_list:
+  # Variable naming in roles could be improved but not critical for homelab
+  # Future improvement: prefix all role variables with role name
+  - var-naming[no-role-prefix]
+
+  # Direct task execution clearer than handlers for one-off operations
+  # Acceptable for sequential homelab playbooks
+  - no-handler
+
+exclude_paths:
+  - outputs/
+  - .env/
+  - playbooks/roles/acme/  # Role deleted, ignore any remaining references

@@ -9,7 +9,7 @@
             - name: root
             - name: developer
   handlers:
-    - name: restart sshd
+    - name: Restart sshd
       ansible.builtin.service:
         name: sshd
         state: restarted
@@ -23,14 +23,14 @@
         update_cache: true
 
     - name: Create developer user
-      user:
+      ansible.builtin.user:
         name: developer
         shell: /bin/zsh
         create_home: true
         state: present
 
     - name: Set up authorized keys for developer
-      authorized_key:
+      ansible.posix.authorized_key:
         user: developer
         state: present
         key: "{{ users.developer.public_key }}"

@@ -18,9 +18,10 @@
   register: oh_my_zsh_stat
 
 - name: Run Oh My Zsh installation script
-  command: sh "{{ user_home }}/install.sh" --unattended
+  ansible.builtin.command: sh "{{ user_home }}/install.sh" --unattended
   register: ohmyzsh_result
   failed_when: "'FAILED' in ohmyzsh_result.stderr"
+  changed_when: not oh_my_zsh_stat.stat.exists
   when: not oh_my_zsh_stat.stat.exists
   become: true
   become_user: "{{ item.name }}"

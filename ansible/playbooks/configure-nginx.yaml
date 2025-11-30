@@ -63,7 +63,7 @@
         owner: root
         group: root
         mode: '0644'
-      notify: reload_nginx
+      notify: Reload nginx
 
     - name: Check if Vault root CA already exists
       ansible.builtin.stat:
@@ -150,14 +150,14 @@
         owner: root
         group: root
         mode: '0644'
-      notify: reload_nginx
+      notify: Reload nginx
 
     - name: Enable nginx direct-access site
       ansible.builtin.file:
         src: /etc/nginx/sites-available/nginx-direct.conf
         dest: /etc/nginx/sites-enabled/nginx-direct.conf
         state: link
-      notify: reload_nginx
+      notify: Reload nginx
 
     - name: Enable and start nginx service
       ansible.builtin.systemd:
@@ -174,7 +174,7 @@
         node_exporter_nginx_enabled: true
 
   handlers:
-    - name: reload_nginx
+    - name: Reload nginx
       ansible.builtin.systemd:
         name: nginx
         state: reloaded

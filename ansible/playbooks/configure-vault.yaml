@@ -87,6 +87,7 @@
       when: r_init_data_file.stat.exists
 
     - name: Block to run only when Vault needs to be initialized
+      when: not r_init_data_file.stat.exists
       block:
         - name: Initialize Vault for the first time
           ansible.builtin.command:
@@ -107,7 +108,6 @@
             group: vault
             mode: '0600'
           when: r_vault_init.changed
-      when: not r_init_data_file.stat.exists
 
     - name: Consolidate Vault init data into a single variable
       ansible.builtin.set_fact:
@@ -121,6 +121,7 @@
         VAULT_ADDR: "{{ vault_addr }}"
       ansible.builtin.command:
         cmd: "vault operator unseal -format json {{ item }}"
+      changed_when: false
 
     - name: Generate SSH key for GitHub access
       community.crypto.openssh_keypair:
@@ -236,6 +237,7 @@
         VAULT_SKIP_VERIFY: "true"
       loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
       no_log: "{{ vault_no_log | bool }}"
+      changed_when: false
 
     - name: Template vault terraform variables with TLS
       ansible.builtin.template:
@@ -278,6 +280,7 @@
         VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
       ansible.builtin.command:
         cmd: "vault status -format json"
+      changed_when: false
 
     - name: Vault status report
       ansible.builtin.debug:

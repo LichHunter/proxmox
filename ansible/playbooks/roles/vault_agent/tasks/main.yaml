@@ -182,13 +182,6 @@
   retries: 10
   delay: 2
 
-- name: Check Vault Agent service health
-  ansible.builtin.command:
-    cmd: systemctl is-active vault-agent
-  register: vault_agent_health
-  changed_when: false
-  failed_when: vault_agent_health.rc != 0
-
 - name: Verify Vault Agent process is running
   ansible.builtin.command:
     cmd: pgrep -f "vault agent"

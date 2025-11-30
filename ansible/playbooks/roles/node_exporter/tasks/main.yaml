@@ -70,7 +70,7 @@
     mode: '0755'
     remote_src: true
   when: not node_exporter_binary.stat.exists
-  notify: restart_node_exporter
+  notify: Restart node_exporter
 
 - name: Clean up downloaded files
   ansible.builtin.file:
@@ -88,7 +88,7 @@
     owner: "{{ node_exporter_service_user }}"
     group: "{{ node_exporter_service_group }}"
     mode: '0644'
-  notify: restart_node_exporter
+  notify: Restart node_exporter
 
 - name: Install node_exporter systemd service
   ansible.builtin.template:
@@ -97,7 +97,7 @@
     owner: root
     group: root
     mode: '0644'
-  notify: restart_node_exporter
+  notify: Restart node_exporter
 
 - name: Ensure node_exporter is enabled and running
   ansible.builtin.systemd:
@@ -137,7 +137,7 @@
     mode: '0755'
     remote_src: true
   when: node_exporter_nginx_enabled and not nginx_exporter_binary.stat.exists
-  notify: restart_nginx_exporter
+  notify: Restart nginx_exporter
 
 - name: Clean up nginx-prometheus-exporter downloaded files
   ansible.builtin.file:
@@ -156,7 +156,7 @@
     group: root
     mode: '0644'
   when: node_exporter_nginx_enabled
-  notify: restart_nginx_exporter
+  notify: Restart nginx_exporter
 
 - name: Ensure nginx_exporter is enabled and running
   ansible.builtin.systemd:

@@ -10,7 +10,7 @@
 
 - name: Create user
   loop: "{{ zsh.users }}"
-  user:
+  ansible.builtin.user:
     name: "{{ item.name }}"
     shell: /bin/zsh
     create_home: "{{ item.name != 'root' }}"
@@ -21,4 +21,4 @@
     default_home_path: "{{ '/root' if item.name == 'root' else '/home/' + item.name }}"
     user_home: "{{ item.home | default(default_home_path) }}"
   loop: "{{ zsh.users }}"
-  include_tasks: configure-zsh.yaml
+  ansible.builtin.include_tasks: configure-zsh.yaml

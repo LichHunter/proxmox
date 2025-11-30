@@ -163,7 +163,7 @@
         owner: "{{ service_user }}"
         group: "{{ service_group }}"
         mode: '0644'
-      notify: restart_prometheus
+      notify: Restart prometheus
 
     - name: Configure Prometheus Web
       ansible.builtin.template:
@@ -172,7 +172,7 @@
         owner: "{{ service_user }}"
         group: "{{ service_group }}"
         mode: '0644'
-      notify: restart_prometheus
+      notify: Restart prometheus
 
     - name: Install Prometheus systemd service
       ansible.builtin.template:
@@ -181,7 +181,7 @@
         owner: root
         group: root
         mode: '0644'
-      notify: restart_prometheus
+      notify: Restart prometheus
 
     - name: Ensure Prometheus is enabled and running
       ansible.builtin.systemd:
@@ -190,7 +190,7 @@
         enabled: true
 
   handlers:
-    - name: restart_prometheus
+    - name: Restart prometheus
       ansible.builtin.systemd:
         name: prometheus
         state: restarted

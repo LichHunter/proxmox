@@ -23,7 +23,13 @@
           src = ./.;
           hooks = {
             nixfmt.enable = true;
-            ansible-lint.enable = true;
+            ansible-lint = {
+              enable = true;
+              settings = {
+                configPath = "./ansible/ansible-lint";
+                subdir = "./ansible";
+              };
+            };
             tflint.enable = true;
             terraform-format.enable = true;
             terraform-validate.enable = true;
