@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape the specific LXC containers defined in playbook
+  - job_name: 'homelab_services'
+    scheme: https
+    static_configs:
+      - targets:
+{% for target in scrape_targets %}
+        - '{{ target }}.{{ domain }}:9100'
+{% endfor %}

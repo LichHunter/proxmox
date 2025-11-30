@@ -1,0 +1,115 @@
+---
+- name: Configure Prometheus
+  hosts: prometheus
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+
+  vars:
+    service_user: "prometheus"
+    service_group: "prometheus"
+    service_name: "prometheus.service"
+    cert_folder: "/etc/prometheus/certs"
+    cert_filename: "prometheus.homelab.lan"
+    domain: "homelab.com"
+    scrape_targets:
+      - "nginx"
+      - "authentik"
+      - "vault"
+
+  tasks:
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate (Internal LAN)
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/prometheus/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: prometheus_role_id_response
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/prometheus/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: false
+        return_content: true
+      register: prometheus_secret_id_response
+
+    - name: Configure Vault Agent for Prometheus Certificate
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "prometheus.homelab.lan"
+        vault_agent_cert_filename: "{{ cert_filename }}"
+        vault_agent_cert_folder: "{{ cert_folder }}"
+        vault_agent_reload_service: "{{ service_name }}"
+        vault_agent_role_id: "{{ prometheus_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ prometheus_secret_id_response.json.data.secret_id }}"
+        vault_agent_service_user: "{{ service_user }}"
+        vault_agent_service_group: "{{ service_group }}"
+
+    - name: Install Prometheus
+      ansible.builtin.apt:
+        name: prometheus
+        state: present
+        update_cache: true
+
+    - name: Configure Prometheus
+      ansible.builtin.template:
+        src: templates/prometheus.yaml.j2
+        dest: /etc/prometheus/prometheus.yaml
+        owner: prometheus
+        group: prometheus
+        mode: '0644'
+
+    - name: Configure Prometheus Web
+      ansible.builtin.template:
+        src: templates/prometheus-web.yaml.j2
+        dest: /etc/prometheus/web-config.yaml
+        owner: prometheus
+        group: prometheus
+        mode: '0644'
+
+    - name: Update Prometheus Service Arguments
+      ansible.builtin.lineinfile:
+        path: /etc/default/prometheus
+        regexp: '^ARGS='
+        line: 'ARGS="--config.file=/etc/prometheus/prometheus.yaml --web.config.file=/etc/prometheus/web-config.yaml"'
+      notify: restart_prometheus
+
+    - name: Ensure Prometheus is enabled and running
+      ansible.builtin.systemd:
+        name: prometheus
+        state: started
+        enabled: true
+
+  handlers:
+    - name: restart_prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: restarted
+        daemon_reload: true

@@ -30,8 +30,11 @@ vault_agent_cert_perms: "0644"
 vault_agent_key_perms: "0600"
 
 # Common name and reload command must be provided from playbook level
-# vault_agent_common_name: ""  # REQUIRED - must be set in playbook
-# vault_agent_reload_cmd: ""   # REQUIRED - must be set in playbook
+# vault_agent_common_name: ""  # REQUIRED
+# vault_agent_reload_service: "" # REQUIRED
+vault_agent_reload_cmd: "/usr/bin/systemctl reload {{ vault_agent_reload_service }}"
+vault_agent_sudo_reload_cmd: "sudo {{ vault_agent_reload_cmd }}"
+
 
 # Service configuration
 vault_agent_service_user: "root"

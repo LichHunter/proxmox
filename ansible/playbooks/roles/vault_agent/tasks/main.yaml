@@ -1,4 +1,10 @@
 ---
+- name: Create prometheus user
+  ansible.builtin.user:
+    name: "{{ vault_agent_service_user }}"
+    shell: /bin/false
+    system: true
+
 - name: Install required packages
   ansible.builtin.apt:
     name:
@@ -128,6 +134,14 @@
     group: "{{ vault_agent_service_group }}"
     mode: '0600'
   failed_when: false
+
+- name: Allow vault user to reload service
+  community.general.sudoers:
+    name: "vault-reload"
+    user: "{{ vault_agent_service_user }}"
+    commands:
+      - "{{ vault_agent_reload_cmd }}"
+    nopassword: true
 
 - name: Enable and start Vault Agent service
   ansible.builtin.systemd:

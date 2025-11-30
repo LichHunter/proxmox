@@ -27,11 +27,17 @@ auto_auth {
 template {
   source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt.ctmpl"
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt"
-  command     = "{{ vault_agent_reload_cmd }}"
+  exec {
+    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    timeout = "30s"
+  }
 }
 
 template {
   source      = "{{ vault_agent_template_dir }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key.ctmpl"
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key"
-  command     = "{{ vault_agent_reload_cmd }}"
+  exec {
+    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    timeout = "30s"
+  }
 }
