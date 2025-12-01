@@ -5,6 +5,7 @@
       - zsh
       - git
       - sudo
+      - ncurses-term  # To fix terminall issues over SSH
     state: present
     update_cache: true
 

@@ -1,0 +1,125 @@
+---
+- name: Configure GitLab
+  hosts: gitlab
+  gather_facts: true
+  become: true
+  roles:
+    - role: zsh
+      vars:
+        zsh:
+          users:
+            - name: debian
+
+  vars:
+    cert_common_name: "gitlab.homelab.lan"
+    cert_filename: "gitlab.homelab.lan"
+    cert_dir: "/etc/gitlab/ssl"
+
+  tasks:
+    - name: Verify connection to the VM
+      ansible.builtin.ping:
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - openssh-server
+          - ca-certificates
+          - tzdata
+          - perl
+          - postfix
+        state: present
+        update_cache: true
+
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate (Internal LAN)
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.get_url:
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
+        validate_certs: false
+        mode: '0644'
+        owner: root
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/gitlab/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: gitlab_role_id_response
+      become: false
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/auth/approle/role/gitlab/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: true
+        return_content: true
+      register: gitlab_secret_id_response
+      become: false
+
+    - name: Ensure GitLab SSL directory exists
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure Vault Agent for GitLab Certificate
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "{{ cert_common_name }}"
+        vault_agent_cert_filename: "{{ cert_filename }}"
+        vault_agent_cert_folder: "{{ cert_dir }}"
+        vault_agent_reload_service: "gitlab-runsvdir.service"
+        vault_agent_role_id: "{{ gitlab_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ gitlab_secret_id_response.json.data.secret_id }}"
+        vault_agent_service_user: "root"
+        vault_agent_service_group: "root"
+
+    - name: Add GitLab package repository
+      ansible.builtin.shell: |
+        curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+      args:
+        creates: /etc/apt/sources.list.d/gitlab_gitlab-ce.list
+      changed_when: false
+
+    - name: Install GitLab CE
+      ansible.builtin.apt:
+        name: gitlab-ce
+        state: present
+        update_cache: true
+      environment:
+        EXTERNAL_URL: "https://{{ cert_common_name }}"
+
+    - name: Configure GitLab with SSL certificates
+      ansible.builtin.template:
+        src: gitlab.rb.j2
+        dest: /etc/gitlab/gitlab.rb
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Reconfigure GitLab
+
+  handlers:
+    - name: Reconfigure GitLab
+      ansible.builtin.command:
+        cmd: gitlab-ctl reconfigure
+      changed_when: true

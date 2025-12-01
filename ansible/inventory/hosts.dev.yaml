@@ -1,6 +1,12 @@
 ---
 all:
   children:
+    vm:
+      hosts:
+        gitlab:
+          ansible_host: gitlab
+          ansible_user: debian
+          ansible_python_interpreter: /usr/bin/python3.11
     lxc:
       hosts:
         mongodb:

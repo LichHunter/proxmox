@@ -15,3 +15,25 @@ output "debian_container_public_key" {
 output "container_id" {
   value = proxmox_virtual_environment_container.mongodb_container.vm_id
 }
+
+output "gitlab_vm_password" {
+  value     = random_password.gitlab_vm_password.result
+  sensitive = true
+}
+
+output "gitlab_vm_private_key" {
+  value     = tls_private_key.gitlab_vm_key.private_key_pem
+  sensitive = true
+}
+
+output "gitlab_vm_public_key" {
+  value = tls_private_key.gitlab_vm_key.public_key_openssh
+}
+
+output "gitlab_vm_hostname" {
+  value = "gitlab"
+}
+
+output "gitlab_vm_id" {
+  value = proxmox_virtual_environment_vm.gitlab_vm.vm_id
+}

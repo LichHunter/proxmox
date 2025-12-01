@@ -31,7 +31,7 @@ resource "proxmox_virtual_environment_container" "mongodb_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -72,7 +72,7 @@ resource "proxmox_virtual_environment_container" "vault_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -168,7 +168,7 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -220,7 +220,7 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -271,7 +271,7 @@ resource "proxmox_virtual_environment_container" "grafana_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -426,7 +426,7 @@ resource "proxmox_virtual_environment_container" "prometheus_container" {
     }
 
     dns {
-      domain  = "homelab.com"
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -472,12 +472,13 @@ resource "proxmox_virtual_environment_container" "gitlab_runner_container" {
 
     ip_config {
       ipv4 {
-        address = "192.168.100.50/24"
+        address = "192.168.100.11/24"
         gateway = "192.168.100.1"
       }
     }
 
     dns {
+      domain  = "homelab.lan"
       servers = ["192.168.100.1"]
     }
   }
@@ -494,6 +495,64 @@ resource "proxmox_virtual_environment_container" "gitlab_runner_container" {
   operating_system {
     template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
     type             = "debian"
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "gitlab_vm" {
+  vm_id           = 1245
+  name            = "gitlab"
+  node_name       = var.node_name
+  description     = "Managed by Terraform"
+  on_boot         = true
+  stop_on_destroy = true
+  tags            = ["ansible_managed", "gitlab"]
+
+  agent {
+    enabled = false
+  }
+
+  cpu {
+    cores = 12
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 16384
+    floating  = 16384
+  }
+
+  disk {
+    datastore_id = "local-lvm"
+    import_from  = proxmox_virtual_environment_download_file.debian_12_cloud_img.id
+    interface    = "virtio0"
+    iothread     = true
+    discard      = "on"
+    size         = 150
+  }
+
+  initialization {
+    user_account {
+      username = "debian"
+      password = random_password.gitlab_vm_password.result
+      keys     = [tls_private_key.gitlab_vm_key.public_key_openssh]
+    }
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.10/24"
+        gateway = "192.168.100.1"
+      }
+    }
+
+    dns {
+      domain  = "homelab.lan"
+      servers = ["192.168.100.1"]
+    }
+  }
+
+  network_device {
+    bridge = "vmbr1"
+    model  = "virtio"
   }
 }
 
@@ -537,6 +596,16 @@ resource "proxmox_virtual_environment_download_file" "debian_13_lxc_img" {
   upload_timeout     = 300
 }
 
+resource "proxmox_virtual_environment_download_file" "debian_12_cloud_img" {
+  content_type       = "import"
+  datastore_id       = var.datastore_id
+  node_name          = var.node_name
+  url                = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+  checksum           = "5da221d8f7434ee86145e78a2c60ca45eb4ef8296535e04f6f333193225792aa8ceee3df6aea2b4ee72d6793f7312308a8b0c6a1c7ed4c7c730fa7bda1bc665f"
+  checksum_algorithm = "sha512"
+  upload_timeout     = 600
+}
+
 resource "random_password" "debian_container_password" {
   length           = 16
   override_special = "_%@"
@@ -544,6 +613,17 @@ resource "random_password" "debian_container_password" {
 }
 
 resource "tls_private_key" "debian_container_key" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "random_password" "gitlab_vm_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
+resource "tls_private_key" "gitlab_vm_key" {
   algorithm = "RSA"
   rsa_bits  = 2048
 }
