@@ -1,0 +1,29 @@
+---
+# LXC Generator role handlers
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart failed systemd services
+  ansible.builtin.shell: |
+    # Get list of failed units
+    failed_units=$(systemctl list-units --state=failed --no-legend --plain | awk '{print $1}')
+
+    if [ -n "$failed_units" ]; then
+      echo "Attempting to restart failed services:"
+      echo "$failed_units"
+
+      # Try to restart each failed service
+      for unit in $failed_units; do
+        echo "Restarting $unit..."
+        systemctl restart "$unit" || echo "Failed to restart $unit"
+      done
+    else
+      echo "No failed services to restart"
+    fi
+  args:
+    executable: /bin/bash
+  register: r_restart_services
+  changed_when: "'Restarting' in r_restart_services.stdout"
+  when: lxc_generator_restart_services | bool

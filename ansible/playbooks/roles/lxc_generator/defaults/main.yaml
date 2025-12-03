@@ -1,0 +1,14 @@
+---
+# LXC Generator role defaults
+
+# URL to download lxc.generator from
+lxc_generator_url: "https://sources.debian.org/data/main/d/distrobuilder/3.2-2/distrobuilder/lxc.generator"
+
+# Path where the generator will be installed
+lxc_generator_path: "/etc/systemd/system-generators/lxc"
+
+# Whether to automatically reboot after installation if services are failing
+lxc_generator_auto_reboot: false
+
+# Whether to restart failed services after daemon-reload
+lxc_generator_restart_services: true

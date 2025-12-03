@@ -1,0 +1,109 @@
+---
+# LXC Generator role tasks
+# Fixes systemd credential issues in Debian 13 (Trixie) LXC containers
+# Reference: https://github.com/lxc/distrobuilder
+
+- name: Check if running inside an LXC container
+  ansible.builtin.stat:
+    path: /proc/1/environ
+  register: r_proc_environ
+
+- name: Read /proc/1/environ to detect LXC
+  ansible.builtin.slurp:
+    src: /proc/1/environ
+  register: r_environ_content
+  when: r_proc_environ.stat.exists
+
+- name: Set fact for LXC detection
+  ansible.builtin.set_fact:
+    is_lxc_container: "{{ 'container=lxc' in (r_environ_content.content | b64decode) }}"
+  when: r_environ_content is defined
+
+- name: Check systemd version
+  ansible.builtin.command:
+    cmd: systemctl --version
+  register: r_systemd_version
+  changed_when: false
+  when: is_lxc_container | default(false)
+
+- name: Extract systemd version number
+  ansible.builtin.set_fact:
+    systemd_version: "{{ r_systemd_version.stdout_lines[0] | regex_search('\\d+') | int }}"
+  when:
+    - is_lxc_container | default(false)
+    - r_systemd_version is defined
+
+- name: Display detected environment
+  ansible.builtin.debug:
+    msg:
+      - "LXC Container: {{ is_lxc_container | default(false) }}"
+      - "Systemd Version: {{ systemd_version | default('unknown') }}"
+  when: is_lxc_container | default(false)
+
+- name: Check if lxc.generator already exists
+  ansible.builtin.stat:
+    path: "{{ lxc_generator_path }}"
+  register: r_lxc_generator
+  when:
+    - is_lxc_container | default(false)
+    - systemd_version | default(0) | int >= 256
+
+- name: Create systemd generators directory
+  ansible.builtin.file:
+    path: "{{ lxc_generator_path | dirname }}"
+    state: directory
+    mode: '0755'
+  when:
+    - is_lxc_container | default(false)
+    - systemd_version | default(0) | int >= 256
+
+- name: Download lxc.generator script
+  ansible.builtin.get_url:
+    url: "{{ lxc_generator_url }}"
+    dest: "{{ lxc_generator_path }}"
+    mode: '0755'
+    owner: root
+    group: root
+  register: r_generator_install
+  notify:
+    - Reload systemd daemon
+    - Restart failed systemd services
+  when:
+    - is_lxc_container | default(false)
+    - systemd_version | default(0) | int >= 256
+
+- name: Flush handlers to apply changes immediately
+  ansible.builtin.meta: flush_handlers
+  when:
+    - r_generator_install is changed
+
+- name: Check if reboot is needed
+  ansible.builtin.command:
+    cmd: systemctl is-system-running
+  register: r_system_running
+  changed_when: false
+  failed_when: false
+  when:
+    - is_lxc_container | default(false)
+    - r_generator_install is changed
+
+- name: Notify if reboot recommended
+  ansible.builtin.debug:
+    msg: "LXC generator installed. System status: {{ r_system_running.stdout | default('unknown') }}. A reboot is recommended to fully apply changes."
+  when:
+    - is_lxc_container | default(false)
+    - r_generator_install is changed
+    - not lxc_generator_auto_reboot
+
+- name: Reboot system if auto_reboot is enabled
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+  when:
+    - is_lxc_container | default(false)
+    - r_generator_install is changed
+    - lxc_generator_auto_reboot | bool
+
+- name: Skip LXC generator installation
+  ansible.builtin.debug:
+    msg: "Skipping LXC generator installation: Not an LXC container or systemd version < 256"
+  when: not (is_lxc_container | default(false)) or (systemd_version | default(0) | int < 256)
