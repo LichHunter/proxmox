@@ -1,5 +1,5 @@
 ## GitLab URL (direct access via internal network)
-external_url 'https://{{ cert_common_name }}'
+external_url 'https://{{ gitlab_uri }}'
 
 ## GitLab bundled nginx SSL Configuration
 nginx['enable'] = true
@@ -31,6 +31,11 @@ gitlab_rails['gitlab_email_reply_to'] = 'noreply@homelab.lan'
 ## Disable usage ping
 gitlab_rails['usage_ping_enabled'] = false
 
+## Trust system CA bundle (includes Vault root CA)
+gitlab_rails['env'] = {
+  'SSL_CERT_FILE' => '/etc/ssl/certs/ca-certificates.crt'
+}
+
 ## Performance tuning for homelab (reduce resource usage)
 puma['worker_processes'] = 2
 sidekiq['max_concurrency'] = 10
@@ -39,3 +44,36 @@ sidekiq['max_concurrency'] = 10
 gitlab_rails['manage_backup_path'] = true
 gitlab_rails['backup_path'] = "/var/opt/gitlab/backups"
 gitlab_rails['backup_keep_time'] = 604800  # 7 days
+
+## OmniAuth / SSO Configuration with Authentik
+gitlab_rails['omniauth_enabled'] = true
+gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+gitlab_rails['omniauth_sync_email_from_provider'] = 'openid_connect'
+gitlab_rails['omniauth_sync_profile_from_provider'] = ['openid_connect']
+gitlab_rails['omniauth_sync_profile_attributes'] = ['email']
+gitlab_rails['omniauth_auto_sign_in_with_provider'] = 'openid_connect'
+gitlab_rails['omniauth_block_auto_created_users'] = false
+gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
+
+gitlab_rails['omniauth_providers'] = [
+  {
+    name: 'openid_connect',
+    label: 'Authentik SSO',
+    args: {
+      name: 'openid_connect',
+      scope: ['openid', 'profile', 'email'],
+      response_type: 'code',
+      issuer: 'https://{{ authentik_uri }}/application/o/gitlab/',
+      discovery: true,
+      client_auth_method: 'query',
+      uid_field: 'preferred_username',
+      send_scope_to_token_endpoint: 'true',
+      pkce: true,
+      client_options: {
+        identifier: '{{ authentik_gitlab_id }}',
+        secret: '{{ authentik_gitlab_secret }}',
+        redirect_uri: 'https://{{ gitlab_uri }}/users/auth/openid_connect/callback'
+      }
+    }
+  }
+]

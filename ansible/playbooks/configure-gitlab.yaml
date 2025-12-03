@@ -11,6 +11,8 @@
             - name: debian
 
   vars:
+    authentik_uri: "authentik.homelab.com"
+    gitlab_uri: "gitlab.homelab.com"
     cert_common_name: "gitlab.homelab.lan"
     cert_filename: "gitlab.homelab.lan"
     cert_dir: "/etc/gitlab/ssl"
@@ -109,7 +111,7 @@
       environment:
         EXTERNAL_URL: "https://{{ cert_common_name }}"
 
-    - name: Configure GitLab with SSL certificates
+    - name: Configure GitLab
       ansible.builtin.template:
         src: gitlab.rb.j2
         dest: /etc/gitlab/gitlab.rb
