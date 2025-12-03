@@ -1,9 +1,10 @@
 ---
-- name: Install Hashicopr Vault
+- name: Install HashiCorp Vault
   hosts: vault
   gather_facts: true
   become: false
   roles:
+    - lxc_generator
     - zsh
   vars:
     vault_fqdn: "vault.homelab.lan"
@@ -22,12 +23,16 @@
     github_ssh_key_path: "/root/.ssh/github_deploy_key"
 
   tasks:
+    # =========================================================================
+    # COMMON TASKS (Both Initial Setup and Update)
+    # =========================================================================
     - name: Verify connection to the container
       ansible.builtin.ping:
 
-    - name: Install required packges
+    - name: Install required packages
       ansible.builtin.apt:
         name:
+          - python3-debian  # Required for deb822_repository module
           - gnupg
           - curl
           - vim
@@ -35,65 +40,100 @@
         state: present
         update_cache: true
 
-    - name: Add Hashicorp repo
-      ansible.builtin.deb822_repository:
-        name: hashicorp
-        types: [deb]
-        uris: "https://apt.releases.hashicorp.com"
-        components: [main]
-        signed_by: https://apt.releases.hashicorp.com/gpg
-        state: present
-        enabled: true
-        suites: "{{ ansible_facts.distribution_release }}"
-
-    - name: Install vault requirements
-      ansible.builtin.apt:
-        name:
-          - terraform
-          - vault
-        state: present
-        update_cache: true
-
-    - name: Create storage
-      ansible.builtin.file:
-        name: "{{ vault_storage_path }}"
-        owner: vault
-        group: vault
-        mode: "0755"
-        state: directory
-
-    - name: Template vault config
-      ansible.builtin.template:
-        src: templates/vault.hcl.j2
-        dest: /etc/vault.d/vault.hcl
-
-    - name: Start vault service
-      ansible.builtin.service:
-        name: vault
-        enabled: true
-        state: restarted
-
     - name: Check if Vault has already been initialized by looking for the init file
       ansible.builtin.stat:
         path: "{{ vault_storage_path }}/init_data.json"
       register: r_init_data_file
 
     - name: Read existing Vault init data if it exists
-      # The 'slurp' module reads the entire file into a base64 encoded string.
       ansible.builtin.slurp:
         src: "{{ vault_storage_path }}/init_data.json"
       register: r_slurped_data
-      # This task only runs if the stat check found the file.
       when: r_init_data_file.stat.exists
 
-    - name: Block to run only when Vault needs to be initialized
+    - name: Set fact for existing init data
+      ansible.builtin.set_fact:
+        vault_init_data: "{{ r_slurped_data.content | b64decode | from_json }}"
+      no_log: "{{ vault_no_log | default(true) }}"
+      when: r_init_data_file.stat.exists
+
+    # =========================================================================
+    # INITIAL SETUP PATH (When Vault is not initialized)
+    # =========================================================================
+    - name: Initial Setup Block
       when: not r_init_data_file.stat.exists
       block:
+        - name: Add HashiCorp repository for Vault
+          ansible.builtin.deb822_repository:
+            name: hashicorp
+            types: [deb]
+            uris: "https://apt.releases.hashicorp.com"
+            components: [main]
+            signed_by: https://apt.releases.hashicorp.com/gpg
+            state: present
+            enabled: true
+            suites: "{{ ansible_facts.distribution_release }}"
+
+        - name: Download OpenTofu GPG keys
+          ansible.builtin.get_url:
+            url: "{{ item }}"
+            dest: "/etc/apt/keyrings/{{ item | basename }}"
+            mode: '0644'
+          loop:
+            - https://get.opentofu.org/opentofu.gpg
+            - https://packages.opentofu.org/opentofu/tofu/gpgkey
+
+        - name: Add OpenTofu repository
+          ansible.builtin.deb822_repository:
+            name: opentofu
+            types: [deb]
+            uris: https://packages.opentofu.org/opentofu/tofu/any/
+            suites: any
+            components: [main]
+            signed_by: /etc/apt/keyrings/opentofu.gpg /etc/apt/keyrings/gpgkey
+            state: present
+            enabled: true
+
+        - name: Install Vault and OpenTofu
+          ansible.builtin.apt:
+            name:
+              - vault
+              - tofu
+            state: present
+            update_cache: true
+
+        - name: Create storage directory
+          ansible.builtin.file:
+            name: "{{ vault_storage_path }}"
+            owner: vault
+            group: vault
+            mode: "0755"
+            state: directory
+
+        - name: Template initial Vault config (HTTP mode)
+          ansible.builtin.template:
+            src: templates/vault.hcl.j2
+            dest: /etc/vault.d/vault.hcl
+          vars:
+            vault_tls_enabled: false
+
+        - name: Start Vault service
+          ansible.builtin.service:
+            name: vault
+            enabled: true
+            state: started
+
+        - name: Wait for Vault to be ready
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ vault_port | default(8200) }}"
+            timeout: 30
+
         - name: Initialize Vault for the first time
           ansible.builtin.command:
             cmd: vault operator init -format json
           environment:
-            VAULT_ADDR: "{{ vault_addr }}"
+            VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
           register: r_vault_init
           changed_when: r_vault_init.rc == 0
           failed_when:
@@ -109,175 +149,293 @@
             mode: '0600'
           when: r_vault_init.changed
 
-    - name: Consolidate Vault init data into a single variable
-      ansible.builtin.set_fact:
-        vault_init_data: "{{ (r_slurped_data.content | b64decode | from_json) if r_init_data_file.stat.exists else (r_vault_init.stdout | from_json) }}"
-      no_log: "{{ vault_no_log | default(true) }}"
+        - name: Set fact for new init data
+          ansible.builtin.set_fact:
+            vault_init_data: "{{ r_vault_init.stdout | from_json }}"
+          no_log: "{{ vault_no_log | default(true) }}"
 
-    - name: Vault unseal
-      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
-      no_log: "{{ vault_no_log | default(true) }}"
-      environment:
-        VAULT_ADDR: "{{ vault_addr }}"
-      ansible.builtin.command:
-        cmd: "vault operator unseal -format json {{ item }}"
-      changed_when: false
+        - name: Unseal Vault (Initial - HTTP)
+          loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+          no_log: "{{ vault_no_log | default(true) }}"
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
+          ansible.builtin.command:
+            cmd: "vault operator unseal {{ item }}"
+          changed_when: false
 
-    - name: Generate SSH key for GitHub access
-      community.crypto.openssh_keypair:
-        path: "{{ github_ssh_key_path }}"
-        type: ed25519
-        owner: root
-        mode: "0600"
+        - name: Generate SSH key for GitHub access
+          community.crypto.openssh_keypair:
+            path: "{{ github_ssh_key_path }}"
+            type: ed25519
+            owner: root
+            mode: "0600"
 
-    - name: Read public key for GitHub
-      ansible.builtin.slurp:
-        src: "{{ github_ssh_key_path }}.pub"
-      register: r_ssh_pub_key
+        - name: Read public key for GitHub
+          ansible.builtin.slurp:
+            src: "{{ github_ssh_key_path }}.pub"
+          register: r_ssh_pub_key
 
-    - name: Add deploy key to private GitHub repository
-      community.general.github_deploy_key:
-        repo: "{{ github_repo }}"
-        owner: "{{ github_org }}"
-        name: "ansible-vault-bootstrap-{{ ansible_date_time.iso8601 }}"
-        key: "{{ r_ssh_pub_key.content | b64decode }}"
-        read_only: true
-        token: "{{ github_access_token }}"
-      delegate_to: localhost
-      run_once: true
+        - name: Add deploy key to private GitHub repository
+          community.general.github_deploy_key:
+            repo: "{{ github_repo }}"
+            owner: "{{ github_org }}"
+            name: "ansible-vault-bootstrap-{{ ansible_date_time.iso8601 }}"
+            key: "{{ r_ssh_pub_key.content | b64decode }}"
+            read_only: true
+            token: "{{ github_access_token }}"
+          delegate_to: localhost
+          run_once: true
 
-    - name: Clone private Terraform repository
-      ansible.builtin.git:
-        repo: "git@github.com:{{ github_org }}/{{ github_repo }}.git"
-        dest: "{{ github_repo_path }}"
-        version: master
-        key_file: "{{ github_ssh_key_path }}"
-        accept_newhostkey: true
-        force: true
+        - name: Clone private Terraform repository
+          ansible.builtin.git:
+            repo: "git@github.com:{{ github_org }}/{{ github_repo }}.git"
+            dest: "{{ github_repo_path }}"
+            version: master
+            key_file: "{{ github_ssh_key_path }}"
+            accept_newhostkey: true
+            force: true
 
-    - name: Template vault terraform variables
-      ansible.builtin.template:
-        src: templates/vault_terraform_vars.tfvars.j2
-        dest: "{{ github_repo_path }}/terraform.tfvars"
-      vars:
-        vault_tls_enabled: false
+        - name: Template vault terraform variables (HTTP)
+          ansible.builtin.template:
+            src: templates/vault_terraform_vars.tfvars.j2
+            dest: "{{ github_repo_path }}/terraform.tfvars"
+          vars:
+            vault_tls_enabled: false
 
-    - name: Configure vault using terraform
-      community.general.terraform:
-        project_path: "{{ github_repo_path }}"
-        state: present
-        force_init: true
-      environment:
-        VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
-        VAULT_TOKEN: "{{ vault_init_data.root_token }}"
-      register: r_terraform_apply
-      no_log: "{{ vault_no_log | bool }}"
+        - name: Initialize OpenTofu
+          ansible.builtin.command:
+            cmd: tofu init
+            chdir: "{{ github_repo_path }}"
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
+            VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+          changed_when: false
+          no_log: "{{ vault_no_log | bool }}"
 
-    - name: Fetch AppRole role_id for Vault service
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/role-id"
-        method: GET
-        headers:
-          X-Vault-Token: "{{ vault_init_data.root_token }}"
-        return_content: true
-      register: vault_role_id_response
+        - name: Configure Vault using OpenTofu (HTTP)
+          ansible.builtin.command:
+            cmd: tofu apply -auto-approve
+            chdir: "{{ github_repo_path }}"
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:{{ vault_port | default(8200) }}"
+            VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+          register: r_tofu_apply_http
+          changed_when: "'Apply complete!' in r_tofu_apply_http.stdout"
+          no_log: "{{ vault_no_log | bool }}"
 
-    - name: Generate AppRole secret_id for Vault service
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/secret-id"
-        method: POST
-        headers:
-          X-Vault-Token: "{{ vault_init_data.root_token }}"
-        return_content: true
-      register: vault_secret_id_response
+        - name: Fetch AppRole role_id for Vault service
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/role-id"
+            method: GET
+            headers:
+              X-Vault-Token: "{{ vault_init_data.root_token }}"
+            return_content: true
+          register: vault_role_id_response
 
-    - name: Configure Vault Agent for Vault service certificates
-      ansible.builtin.include_role:
-        name: vault_agent
-      vars:
-        vault_agent_common_name: "vault.homelab.lan"
-        vault_agent_cert_filename: "{{ vault_fqdn }}"
-        vault_agent_cert_folder: "{{ vault_tls_path }}"
-        vault_agent_reload_cmd: "systemctl reload vault || true"
-        vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
-        vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
-        vault_agent_vault_addr: "http://127.0.0.1:8200"
-        vault_agent_service_user: "vault"
-        vault_agent_service_group: "vault"
-        vault_agent_cert_perms: "0644"
-        vault_agent_key_perms: "0600"
+        - name: Generate AppRole secret_id for Vault service
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:8200/v1/auth/approle/role/vault/secret-id"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ vault_init_data.root_token }}"
+            return_content: true
+          register: vault_secret_id_response
 
-    - name: Restart Vault Agent to generate initial certificates
-      ansible.builtin.systemd:
-        name: vault-agent
-        state: restarted
+        - name: Configure Vault Agent for Vault service certificates (HTTP)
+          ansible.builtin.include_role:
+            name: vault_agent
+          vars:
+            vault_agent_common_name: "vault.homelab.lan"
+            vault_agent_cert_filename: "{{ vault_fqdn }}"
+            vault_agent_cert_folder: "{{ vault_tls_path }}"
+            vault_agent_reload_cmd: "systemctl reload vault || true"
+            vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
+            vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
+            vault_agent_vault_addr: "http://127.0.0.1:8200"
+            vault_agent_service_user: "vault"
+            vault_agent_service_group: "vault"
+            vault_agent_cert_perms: "0644"
+            vault_agent_key_perms: "0600"
 
-    - name: Wait for Vault Agent to generate certificates
-      ansible.builtin.wait_for:
-        path: "{{ vault_tls_path }}/{{ vault_fqdn }}.crt"
-        timeout: 60
+        - name: Restart Vault Agent to generate initial certificates
+          ansible.builtin.systemd:
+            name: vault-agent
+            state: restarted
 
-    - name: Template vault config
-      ansible.builtin.template:
-        src: templates/vault.hcl.j2
-        dest: /etc/vault.d/vault.hcl
-      vars:
-        vault_tls_enabled: true
+        - name: Wait for Vault Agent to generate certificates
+          ansible.builtin.wait_for:
+            path: "{{ vault_tls_path }}/{{ vault_fqdn }}.crt"
+            timeout: 60
 
-    - name: Restart vault service
-      ansible.builtin.service:
-        name: vault
-        enabled: true
-        state: restarted
+        - name: Template Vault config with TLS enabled
+          ansible.builtin.template:
+            src: templates/vault.hcl.j2
+            dest: /etc/vault.d/vault.hcl
+          vars:
+            vault_tls_enabled: true
 
-    - name: Re-Unseal Vault over HTTPS
-      ansible.builtin.command: "vault operator unseal {{ item }}"
-      environment:
-        VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
-        VAULT_SKIP_VERIFY: "true"
-      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
-      no_log: "{{ vault_no_log | bool }}"
-      changed_when: false
+        - name: Restart Vault service to enable TLS
+          ansible.builtin.service:
+            name: vault
+            enabled: true
+            state: restarted
 
-    - name: Template vault terraform variables with TLS
-      ansible.builtin.template:
-        src: templates/vault_terraform_vars.tfvars.j2
-        dest: "{{ github_repo_path }}/terraform.tfvars"
-      vars:
-        vault_tls_enabled: true
+        - name: Wait for Vault to be ready with TLS
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ vault_port | default(8200) }}"
+            timeout: 30
 
-    - name: Configure vault using terraform to use TLS
-      community.general.terraform:
-        project_path: "{{ github_repo_path }}"
-        state: present
-        force_init: true
-      environment:
-        VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
-        VAULT_TOKEN: "{{ vault_init_data.root_token }}"
-        VAULT_SKIP_VERIFY: "true"
-      register: r_terraform_apply
-      no_log: "{{ vault_no_log | bool }}"
+        - name: Re-unseal Vault over HTTPS
+          ansible.builtin.command: "vault operator unseal {{ item }}"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_SKIP_VERIFY: "true"
+          loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+          no_log: "{{ vault_no_log | bool }}"
+          changed_when: false
 
-    - name: Configure Vault Agent for TLS Vault
-      ansible.builtin.include_role:
-        name: vault_agent
-      vars:
-        vault_agent_common_name: "vault.homelab.lan"
-        vault_agent_cert_filename: "{{ vault_fqdn }}"
-        vault_agent_cert_folder: "{{ vault_tls_path }}"
-        vault_agent_reload_cmd: "systemctl reload vault || true"
-        vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
-        vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
-        vault_agent_service_user: "vault"
-        vault_agent_service_group: "vault"
-        vault_agent_cert_perms: "0644"
-        vault_agent_key_perms: "0600"
+        - name: Template vault terraform variables with TLS
+          ansible.builtin.template:
+            src: templates/vault_terraform_vars.tfvars.j2
+            dest: "{{ github_repo_path }}/terraform.tfvars"
+          vars:
+            vault_tls_enabled: true
 
+        - name: Configure Vault using OpenTofu with TLS
+          ansible.builtin.command:
+            cmd: tofu apply -auto-approve
+            chdir: "{{ github_repo_path }}"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+            VAULT_SKIP_VERIFY: "true"
+          register: r_tofu_apply_https
+          changed_when: "'Apply complete!' in r_tofu_apply_https.stdout"
+          no_log: "{{ vault_no_log | bool }}"
+
+        - name: Configure Vault Agent for TLS Vault
+          ansible.builtin.include_role:
+            name: vault_agent
+          vars:
+            vault_agent_common_name: "vault.homelab.lan"
+            vault_agent_cert_filename: "{{ vault_fqdn }}"
+            vault_agent_cert_folder: "{{ vault_tls_path }}"
+            vault_agent_reload_cmd: "systemctl reload vault || true"
+            vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
+            vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
+            vault_agent_service_user: "vault"
+            vault_agent_service_group: "vault"
+            vault_agent_cert_perms: "0644"
+            vault_agent_key_perms: "0600"
+
+    # =========================================================================
+    # UPDATE PATH (When Vault is already initialized)
+    # =========================================================================
+    - name: Update Block
+      when: r_init_data_file.stat.exists
+      block:
+        - name: Check Vault seal status
+          ansible.builtin.command:
+            cmd: "vault status -format json"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_SKIP_VERIFY: "true"
+          register: r_vault_status_pre
+          changed_when: false
+          failed_when: false
+
+        - name: Unseal Vault if sealed (before updates)
+          ansible.builtin.command: "vault operator unseal {{ item }}"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_SKIP_VERIFY: "true"
+          loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+          no_log: "{{ vault_no_log | bool }}"
+          changed_when: false
+          when: (r_vault_status_pre.stdout | from_json).sealed | default(true)
+
+        - name: Template Vault configuration
+          ansible.builtin.template:
+            src: templates/vault.hcl.j2
+            dest: /etc/vault.d/vault.hcl
+          vars:
+            vault_tls_enabled: true
+          register: r_vault_config
+
+        - name: Reload Vault service if configuration changed
+          ansible.builtin.systemd:
+            name: vault
+            state: reloaded
+          when: r_vault_config.changed
+
+        - name: Check Vault seal status after reload
+          ansible.builtin.command:
+            cmd: "vault status -format json"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_SKIP_VERIFY: "true"
+          register: r_vault_status_post
+          changed_when: false
+          failed_when: false
+          when: r_vault_config.changed
+
+        - name: Unseal Vault if sealed after reload
+          ansible.builtin.command: "vault operator unseal {{ item }}"
+          environment:
+            VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+            VAULT_SKIP_VERIFY: "true"
+          loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+          no_log: "{{ vault_no_log | bool }}"
+          changed_when: false
+          when:
+            - r_vault_config.changed
+            - (r_vault_status_post.stdout | from_json).sealed | default(true)
+
+        - name: Fetch AppRole role_id for Vault service
+          ansible.builtin.uri:
+            url: "https://vault.homelab.lan:8200/v1/auth/approle/role/vault/role-id"
+            method: GET
+            headers:
+              X-Vault-Token: "{{ vault_init_data.root_token }}"
+            return_content: true
+            validate_certs: false
+          register: vault_role_id_response
+
+        - name: Generate AppRole secret_id for Vault service
+          ansible.builtin.uri:
+            url: "https://vault.homelab.lan:8200/v1/auth/approle/role/vault/secret-id"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ vault_init_data.root_token }}"
+            return_content: true
+            validate_certs: false
+          register: vault_secret_id_response
+
+        - name: Update Vault Agent configuration
+          ansible.builtin.include_role:
+            name: vault_agent
+          vars:
+            vault_agent_common_name: "vault.homelab.lan"
+            vault_agent_cert_filename: "{{ vault_fqdn }}"
+            vault_agent_cert_folder: "{{ vault_tls_path }}"
+            vault_agent_reload_service: "vault.service"
+            vault_agent_role_id: "{{ vault_role_id_response.json.data.role_id }}"
+            vault_agent_secret_id: "{{ vault_secret_id_response.json.data.secret_id }}"
+            vault_agent_service_user: "vault"
+            vault_agent_service_group: "vault"
+            vault_agent_cert_perms: "0644"
+            vault_agent_key_perms: "0600"
+
+    # =========================================================================
+    # COMMON FINAL TASKS (Both Initial Setup and Update)
+    # =========================================================================
     - name: Vault status
       register: r_vault_status
       no_log: "{{ vault_no_log | default(true) }}"
       environment:
         VAULT_ADDR: "https://vault.homelab.lan:{{ vault_port | default(8200) }}"
+        VAULT_SKIP_VERIFY: "true"
       ansible.builtin.command:
         cmd: "vault status -format json"
       changed_when: false
