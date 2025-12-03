@@ -30,6 +30,11 @@
         backend_port: 9090
         backend_protocol: https
 
+      - server_name: gitlab.homelab.com
+        backend_host: gitlab.homelab.lan
+        backend_port: 443
+        backend_protocol: https
+
   tasks:
     - name: Install nginx
       ansible.builtin.apt:

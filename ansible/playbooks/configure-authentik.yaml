@@ -67,7 +67,7 @@
         vault_agent_common_name: "{{ cert_common_name }}"
         vault_agent_cert_filename: "{{ cert_filename }}"
         vault_agent_cert_folder: "/opt/authentik/certs"
-        vault_agent_reload_cmd: "/bin/docker compose -f /root/authentik/compose.yaml restart"
+        vault_agent_reload_cmd: "/bin/bash -c 'docker restart authentik-server-1 && if docker ps -a --format \"{{.Names}}\" | grep -q \"^authentik-ldap-1$\"; then docker restart authentik-ldap-1; fi'"
         vault_agent_role_id: "{{ authentik_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ authentik_secret_id_response.json.data.secret_id }}"
 
