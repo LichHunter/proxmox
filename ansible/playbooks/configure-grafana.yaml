@@ -59,7 +59,7 @@
         vault_agent_common_name: "{{ hostname }}"
         vault_agent_cert_filename: "{{ hostname }}"
         vault_agent_cert_folder: "{{ cert_dir }}"
-        vault_agent_reload_service: "grafana.service"
+        vault_agent_reload_cmd: "/usr/bin/systemctl restart grafana-server.service"
         vault_agent_role_id: "{{ grafana_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ grafana_secret_id_response.json.data.secret_id }}"
         vault_agent_service_user: "grafana"
