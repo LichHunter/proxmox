@@ -35,6 +35,8 @@ vault_agent_key_perms: "0600"
 #
 # vault_agent_common_name: ""  # REQUIRED for Mode 1
 # vault_agent_cert_filename: "" # OPTIONAL for Mode 1 (defaults to common_name)
+# vault_agent_alt_names: ""     # OPTIONAL for Mode 1 (comma-separated DNS names/emails)
+# vault_agent_ip_sans: ""       # OPTIONAL for Mode 1 (comma-separated IP addresses)
 #
 # vault_agent_certificates: []  # REQUIRED for Mode 2
 #   Example:
@@ -43,6 +45,11 @@ vault_agent_key_perms: "0600"
 #     ttl: "24h"  # optional, defaults to vault_agent_cert_ttl
 #   - common_name: "nginx.homelab.lan"
 #     filename: "nginx.homelab.lan"
+#   - common_name: "gitlab.homelab.lan"
+#     filename: "gitlab"
+#     alt_names: "gitlab.homelab.com,registry.gitlab.homelab.lan"  # optional: additional SANs (comma-separated)
+#     ip_sans: "192.168.1.50"  # optional: IP addresses (comma-separated)
+#     ttl: "168h"
 
 vault_agent_certificates: []  # Empty list = use legacy Mode 1
 

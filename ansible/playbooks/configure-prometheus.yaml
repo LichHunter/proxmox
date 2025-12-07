@@ -27,7 +27,7 @@
     blackbox_exporter_https_targets:
       - "https://vault.homelab.lan:8200"
       - "https://authentik.homelab.lan:9443"
-      - "https://grafana.homelab.lan:443"
+      - "https://grafana.homelab.lan:3000"
       - "https://prometheus.homelab.lan:9090"
       - "https://gitlab.homelab.com:443"
       - "https://nginx.homelab.lan:443"

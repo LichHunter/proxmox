@@ -88,9 +88,10 @@
         name: vault_agent
       vars:
         vault_agent_common_name: "{{ cert_common_name }}"
+        vault_agent_alt_names: "{{ gitlab_uri }}"  # Add .com domain as SAN
         vault_agent_cert_filename: "{{ cert_filename }}"
         vault_agent_cert_folder: "{{ cert_dir }}"
-        vault_agent_reload_service: "gitlab-runsvdir.service"
+        vault_agent_reload_cmd: "/opt/gitlab/bin/gitlab-ctl hup nginx"
         vault_agent_role_id: "{{ gitlab_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ gitlab_secret_id_response.json.data.secret_id }}"
         vault_agent_service_user: "root"

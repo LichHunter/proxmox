@@ -1,4 +1,4 @@
-{% raw %}{{- with secret "{% endraw %}{{ vault_agent_pki_role_path }}{% raw %}" "common_name={% endraw %}{{ cert_common_name | default(vault_agent_common_name) }}{% raw %}" "ttl={% endraw %}{{ cert_ttl | default(vault_agent_cert_ttl) }}{% raw %}" -}}
+{% raw %}{{- with secret "{% endraw %}{{ vault_agent_pki_role_path }}{% raw %}" "common_name={% endraw %}{{ cert_common_name | default(vault_agent_common_name) }}{% raw %}"{% endraw %} {% if vault_agent_alt_names is defined %}{% raw %}"alt_names={% endraw %}{{ vault_agent_alt_names }}{% raw %}"{% endraw %}{% endif %} {% if vault_agent_ip_sans is defined %}{% raw %}"ip_sans={% endraw %}{{ vault_agent_ip_sans }}{% raw %}"{% endraw %}{% endif %} {% raw %}"ttl={% endraw %}{{ cert_ttl | default(vault_agent_cert_ttl) }}{% raw %}" -}}
 {{ .Data.certificate }}
 {{ .Data.issuing_ca }}
 {{- end -}}{% endraw %}
