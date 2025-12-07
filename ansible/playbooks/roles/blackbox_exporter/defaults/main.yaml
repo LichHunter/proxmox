@@ -1,0 +1,10 @@
+---
+# Blackbox Exporter role defaults
+
+blackbox_exporter_version: "0.25.0"
+blackbox_exporter_arch: "linux-amd64"
+blackbox_exporter_install_dir: "/usr/local/bin"
+blackbox_exporter_config_dir: "/etc/blackbox_exporter"
+blackbox_exporter_user: "root"
+blackbox_exporter_group: "root"
+blackbox_exporter_listen_address: "0.0.0.0:9115"

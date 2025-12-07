@@ -24,6 +24,13 @@
       - "nginx"
       - name: "authentik"
         port: 9300
+    blackbox_exporter_https_targets:
+      - "https://vault.homelab.lan:8200"
+      - "https://authentik.homelab.lan:9443"
+      - "https://grafana.homelab.lan:443"
+      - "https://prometheus.homelab.lan:9090"
+      - "https://gitlab.homelab.com:443"
+      - "https://nginx.homelab.lan:443"
 
   tasks:
     - name: Check if Vault root CA already exists
@@ -188,6 +195,10 @@
         name: prometheus
         state: started
         enabled: true
+
+    - name: Enable blackbox exporter
+      ansible.builtin.include_role:
+        name: blackbox_exporter
 
   handlers:
     - name: Restart prometheus

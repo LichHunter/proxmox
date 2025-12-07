@@ -32,3 +32,33 @@ scrape_configs:
       - targets:
         - 'nginx.{{ scrape_target_hostname }}:9113'
 {% endif %}
+
+  # Blackbox Exporter - probe HTTPS endpoints and monitor TLS certificates
+  - job_name: 'blackbox_https_2xx'
+    metrics_path: /probe
+    params:
+      module: [https_2xx]
+    static_configs:
+      - targets:
+{% if blackbox_exporter_https_targets is defined %}
+{% for target in blackbox_exporter_https_targets %}
+        - '{{ target }}'
+{% endfor %}
+{% endif %}
+    relabel_configs:
+      # Use the target address as the __param_target parameter
+      - source_labels: [__address__]
+        target_label: __param_target
+      # Use the target address as the instance label
+      - source_labels: [__param_target]
+        target_label: instance
+      # Actually probe via the blackbox exporter running on localhost
+      - target_label: __address__
+        replacement: localhost:9115
+
+  # Scrape Blackbox Exporter metrics itself
+  - job_name: 'blackbox_exporter'
+    scheme: http
+    static_configs:
+      - targets:
+        - 'localhost:9115'

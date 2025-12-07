@@ -1,0 +1,30 @@
+[Unit]
+Description=Blackbox Exporter
+Documentation=https://github.com/prometheus/blackbox_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ blackbox_exporter_user }}
+Group={{ blackbox_exporter_group }}
+ExecStart={{ blackbox_exporter_install_dir }}/blackbox_exporter \
+  --config.file={{ blackbox_exporter_config_dir }}/blackbox.yml \
+  --web.listen-address={{ blackbox_exporter_listen_address }}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=blackbox_exporter
+
+# Security settings
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target
