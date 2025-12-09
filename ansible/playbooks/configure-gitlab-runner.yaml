@@ -7,6 +7,10 @@
   roles:
     - zsh
     - nix
+    - role: docker
+      vars:
+        docker_users:
+          - gitlab-runner
 
   vars:
     cert_common_name: "gitlab-runner.homelab.lan"
@@ -89,18 +93,62 @@
         enabled: true
         suites: "{{ ansible_facts.distribution_release }}"
 
-    - name: Install GitLab Runner
+    - name: Install GitLab Runner and Docker (pinned version for Testcontainers compatibility)
       ansible.builtin.apt:
         name:
           - gitlab-runner
+          - docker-ce=5:28.3.3-1~debian.13~trixie
+          - docker-ce-cli=5:28.3.3-1~debian.13~trixie
         state: present
         update_cache: true
+        allow_downgrade: true
+
+    - name: Update user
+      ansible.builtin.user:
+        name: gitlab-runner
+        shell: /bin/bash
+        system: true
 
     - name: Ensure gitlab-runner user can access Nix
       ansible.builtin.user:
         name: gitlab-runner
         groups: nixbld
         append: true
+
+    - name: Configure minimal .bashrc for gitlab-runner
+      ansible.builtin.copy:
+        dest: /home/gitlab-runner/.bashrc
+        content: |
+          export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+        owner: gitlab-runner
+        group: gitlab-runner
+        mode: '0644'
+
+    - name: Ensure .bash_logout is empty
+      ansible.builtin.copy:
+        dest: /home/gitlab-runner/.bash_logout
+        content: ""
+        owner: gitlab-runner
+        group: gitlab-runner
+        mode: '0644'
+
+    - name: Remove .profile if it exists
+      ansible.builtin.file:
+        path: /home/gitlab-runner/.profile
+        state: absent
+
+    - name: Remove .bash_profile if it exists
+      ansible.builtin.file:
+        path: /home/gitlab-runner/.bash_profile
+        state: absent
+
+    - name: Ensure builds directory exists
+      ansible.builtin.file:
+        path: /home/gitlab-runner/builds
+        state: directory
+        owner: gitlab-runner
+        group: gitlab-runner
+        mode: '0755'
 
     - name: Enable and start GitLab Runner service
       ansible.builtin.systemd:

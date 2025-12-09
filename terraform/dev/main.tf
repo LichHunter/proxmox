@@ -556,6 +556,57 @@ resource "proxmox_virtual_environment_vm" "gitlab_vm" {
   }
 }
 
+resource "proxmox_virtual_environment_container" "karate_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 1246
+  tags         = ["ansible_managed", "karate"]
+  unprivileged = true
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 4096
+  }
+
+  disk {
+    datastore_id = "local-lvm"
+    size         = 50
+  }
+
+  initialization {
+    hostname = "karate"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    dns {
+      domain  = "homelab.lan"
+      servers = ["192.168.100.1"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+
+  network_interface {
+    name   = "eth1"
+    bridge = "vmbr1"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
 resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   node_name = var.node_name
   name      = "vmbr1"

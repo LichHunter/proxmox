@@ -1,0 +1,41 @@
+---
+- name: Configure Karate Container
+  hosts: karate
+  gather_facts: true
+  become: false
+
+  roles:
+    - role: zsh
+      vars:
+        zsh:
+          users:
+            - name: karate
+            - name: root
+    - role: docker
+      vars:
+        docker_users:
+          - karate
+
+  tasks:
+    - name: Verify connection to the container
+      ansible.builtin.ping:
+
+    - name: Check if Vault root CA already exists
+      ansible.builtin.stat:
+        path: /usr/local/share/ca-certificates/vault-root-ca.crt
+      register: root_ca_stat
+
+    - name: Download Vault root CA certificate (Internal LAN)
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.uri:
+        url: "https://vault.homelab.lan:8200/v1/root_ca/ca/pem"
+        method: GET
+        validate_certs: false
+        return_content: true
+        dest: /usr/local/share/ca-certificates/vault-root-ca.crt
+
+    - name: Update CA certificates
+      when: not root_ca_stat.stat.exists
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true

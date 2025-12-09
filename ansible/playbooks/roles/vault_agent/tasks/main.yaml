@@ -1,5 +1,5 @@
 ---
-- name: Create prometheus user
+- name: Create user
   ansible.builtin.user:
     name: "{{ vault_agent_service_user }}"
     shell: /bin/false
