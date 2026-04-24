@@ -1,9 +1,6 @@
 terraform {
   required_version = "~> 1.10"
 
-  backend "http" {
-  }
-
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"

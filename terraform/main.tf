@@ -1,57 +1,17 @@
 provider "proxmox" {
-  endpoint = var.endpoint
-
-  username = var.username
-
-  password = var.password
-
-  insecure = true
-
+  endpoint  = var.endpoint
+  api_token = "terraform@${var.node_name}!provider=${var.api_token}"
+  insecure  = true
   ssh {
-    agent = true
+    agent    = true
+    username = "terraform"
   }
 }
 
-resource "proxmox_virtual_environment_container" "ubuntu_container" {
-  description = "Managed by Terraform"
+# module "karate-dmz" {
+#   source = "./modules/karate-dmz"
 
-  node_name = "proxmox"
-  vm_id     = 1234
-  tags      = ["ansible_managed"]
-
-  disk {
-    datastore_id = "local"
-    size         = 4
-  }
-
-  initialization {
-    hostname = "CT1234"
-
-    ip_config {
-      ipv4 {
-        address = "dhcp"
-      }
-    }
-  }
-
-  network_interface {
-    name   = "eth0"
-    bridge = "vmbr1"
-  }
-
-  operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_12_lxc_img.id
-    # Or you can use a volume ID, as obtained from a "pvesm list <storage>"
-    # template_file_id = "local:vztmpl/jammy-server-cloudimg-amd64.tar.gz"
-    type = "debian"
-  }
-}
-
-# resource "proxmox_virtual_environment_download_file" "ubuntu_2410_lxc_img" {
-#   content_type = "vztmpl"
-#   datastore_id = "local"
-#   node_name    = "proxmox"
-#   url          = "https://mirrors.servercentral.com/ubuntu-cloud-images/releases/24.10/release/ubuntu-24.10-server-cloudimg-arm64.tar.gz"
+#   api_token = var.api_token
 # }
 
 resource "proxmox_virtual_environment_download_file" "debian_12_lxc_img" {
@@ -75,16 +35,3 @@ resource "tls_private_key" "ubuntu_container_key" {
   algorithm = "RSA"
   rsa_bits  = 2048
 }
-
-# resource "proxmox_virtual_environment_apt_standard_repository" "no_subscription_repository" {
-#   handle = "no-subscription"
-#   node   = "pve"
-# }
-
-# resource "proxmox_virtual_environment_apt_repository" "example" {
-#   enabled   = true
-#   file_path = proxmox_virtual_environment_apt_standard_repository.example.file_path
-#   index     = proxmox_virtual_environment_apt_standard_repository.example.index
-#   node      = proxmox_virtual_environment_apt_standard_repository.example.node
-# }
-#

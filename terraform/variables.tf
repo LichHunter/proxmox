@@ -4,13 +4,20 @@ variable "endpoint" {
   default     = "https://localhost:8006"
 }
 
-variable "username" {
-  description = "Proxmox username"
+variable "node_name" {
+  description = "Proxmox node name"
   type        = string
+  default     = "pve"
 }
 
-variable "password" {
-  description = "Proxmox password"
+# variable "datastore_id" {
+#   description = "Proxmox storage where LXCs will be stored"
+#   type        = string
+#   default     = "local"
+# }
+
+variable "api_token" {
+  description = "Proxmox terraform user api token"
   type        = string
   sensitive   = true
 }
