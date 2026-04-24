@@ -55,6 +55,8 @@
             pre-commit
             gitleaks
             tflint
+
+            opencode
           ];
 
           TF_STATE_NAME = "default";

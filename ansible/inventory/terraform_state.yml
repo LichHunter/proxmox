@@ -1,0 +1,22 @@
+---
+plugin: cloud.terraform.terraform_state
+backend_type: local
+backend_config:
+  path: /home/fujin/Code/proxmox/terraform/terraform.tfstate
+
+provider_mapping:
+  - provider_name: registry.opentofu.org/bpg/proxmox
+    types:
+      - proxmox_virtual_environment_container
+
+
+
+compose:
+  ansible_host: initialization.0.ip_config.0.ipv4.0.address | regex_replace('/.*', '')
+  ansible_user: "'root'"
+  ansible_python_interpreter: "'/usr/bin/python3'"
+
+keyed_groups:
+  - key: tags
+    prefix: ""
+    separator: ""
