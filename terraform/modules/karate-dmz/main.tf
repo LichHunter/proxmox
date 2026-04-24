@@ -44,7 +44,7 @@ resource "proxmox_virtual_environment_container" "mongodb_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     # Or you can use a volume ID, as obtained from a "pvesm list <storage>"
     # template_file_id = "local:vztmpl/jammy-server-cloudimg-amd64.tar.gz"
     type = "debian"
@@ -85,7 +85,7 @@ resource "proxmox_virtual_environment_container" "vault_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -116,7 +116,7 @@ resource "proxmox_virtual_environment_vm" "opnsense_vm" {
   }
 
   cdrom {
-    file_id   = proxmox_virtual_environment_download_file.opnsense_iso.id
+    file_id   = proxmox_download_file.opnsense_iso.id
     interface = "ide2"
   }
 
@@ -186,7 +186,7 @@ resource "proxmox_virtual_environment_container" "jumpbox_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_12_lxc_img.id
+    template_file_id = proxmox_download_file.debian_12_lxc_img.id
     type             = "debian"
   }
 }
@@ -237,7 +237,7 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -288,7 +288,7 @@ resource "proxmox_virtual_environment_container" "grafana_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -340,7 +340,7 @@ resource "proxmox_virtual_environment_container" "unbound_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -392,7 +392,7 @@ resource "proxmox_virtual_environment_container" "nginx_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -443,7 +443,7 @@ resource "proxmox_virtual_environment_container" "prometheus_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -495,7 +495,7 @@ resource "proxmox_virtual_environment_container" "gitlab_runner_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -525,7 +525,7 @@ resource "proxmox_virtual_environment_vm" "gitlab_vm" {
 
   disk {
     datastore_id = "local-lvm"
-    import_from  = proxmox_virtual_environment_download_file.debian_12_cloud_img.id
+    import_from  = proxmox_download_file.debian_12_cloud_img.id
     interface    = "virtio0"
     iothread     = true
     discard      = "on"
@@ -604,7 +604,7 @@ resource "proxmox_virtual_environment_container" "karate_container" {
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_13_lxc_img.id
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
     type             = "debian"
   }
 }
@@ -618,7 +618,7 @@ resource "proxmox_virtual_environment_network_linux_bridge" "vmbr1" {
   ]
 }
 
-resource "proxmox_virtual_environment_download_file" "opnsense_iso" {
+resource "proxmox_download_file" "opnsense_iso" {
   content_type            = "iso"
   datastore_id            = var.datastore_id
   node_name               = var.node_name
@@ -629,7 +629,7 @@ resource "proxmox_virtual_environment_download_file" "opnsense_iso" {
   decompression_algorithm = "bz2"
 }
 
-resource "proxmox_virtual_environment_download_file" "debian_12_lxc_img" {
+resource "proxmox_download_file" "debian_12_lxc_img" {
   content_type       = "vztmpl"
   datastore_id       = var.datastore_id
   node_name          = var.node_name
@@ -639,7 +639,7 @@ resource "proxmox_virtual_environment_download_file" "debian_12_lxc_img" {
   upload_timeout     = 300
 }
 
-resource "proxmox_virtual_environment_download_file" "debian_13_lxc_img" {
+resource "proxmox_download_file" "debian_13_lxc_img" {
   content_type       = "vztmpl"
   datastore_id       = var.datastore_id
   node_name          = var.node_name
@@ -649,7 +649,7 @@ resource "proxmox_virtual_environment_download_file" "debian_13_lxc_img" {
   upload_timeout     = 300
 }
 
-resource "proxmox_virtual_environment_download_file" "debian_12_cloud_img" {
+resource "proxmox_download_file" "debian_12_cloud_img" {
   content_type       = "import"
   datastore_id       = var.datastore_id
   node_name          = var.node_name

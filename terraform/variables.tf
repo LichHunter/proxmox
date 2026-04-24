@@ -10,11 +10,17 @@ variable "node_name" {
   default     = "pve"
 }
 
-# variable "datastore_id" {
-#   description = "Proxmox storage where LXCs will be stored"
-#   type        = string
-#   default     = "local"
-# }
+variable "imagestore_id" {
+  description = "Proxmox storate where Templates and ISOs will be stored"
+  type        = string
+  default     = "local"
+}
+
+variable "datastore_id" {
+  description = "Proxmox storage where LXCs will be stored"
+  type        = string
+  default     = "local-lvm"
+}
 
 variable "api_token" {
   description = "Proxmox terraform user api token"
