@@ -1,0 +1,4 @@
+#+title: Readme
+
+* Terraform invalid x509
+After a bit of debuging i found that authentik by default uses its generated self-signed cert, and i need to update System => Brands default brand

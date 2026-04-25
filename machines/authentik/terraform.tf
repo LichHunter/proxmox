@@ -1,0 +1,15 @@
+terraform {
+  backend "http" {}
+  required_version = "~> 1.10"
+
+  required_providers {
+    authentik = {
+      source  = "goauthentik/authentik"
+      version = "2025.10.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.7.2"
+    }
+  }
+}
