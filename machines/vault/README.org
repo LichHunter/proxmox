@@ -1,0 +1,16 @@
+#+title: Readme
+
+* Connect to vault
+** Dev
+#+begin_src bash
+ssh -L 8200:vault.lab.local:8200 developer@jumpbox -N
+#+end_src
+** CI/CD
+#+begin_src bash
+ssh -L 8200:vault.lab.local:8200 gitlab-runner@jumpbox -N
+#+end_src
+* Links
+- Build your own certificate authority
+  [[https://developer.hashicorp.com/vault/tutorials/pki/pki-engine][Vault Doc]]
+  [[https://www.youtube.com/watch?v=PQh3sDaPJyg&t=438s][Homelab Certificate Authority Guide Youtube]]
+  [[https://www.youtube.com/watch?v=ie6FRcqPBD8][Automate Homelab Secret Retrieval]]

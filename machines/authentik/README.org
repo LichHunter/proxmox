@@ -1,15 +1,25 @@
-#+title: Readme
+#+title: Authentik Terraform Configuration
+
+* Pre-requisites
+- Authentik must be running (deployed via =ansible-playbook playbooks/authentik.yml=)
+- Bootstrap token available in Vault at =kvv2/authentik= (=bootstrap_token= field)
+- Vault CA chain trusted on your machine
 
 * First Run
 #+begin_src bash
-# This should be taken from the vault
-TOKEN=
+export VAULT_ADDR=https://192.168.1.50:8200
+export VAULT_SKIP_VERIFY=true
+TOKEN=$(vault kv get -field=bootstrap_token kvv2/authentik)
 
 BRAND_UUID=$(curl -sk -H "Authorization: Bearer $TOKEN" 'https://authentik.homelab.lan:9443/api/v3/core/brands/?default=true' | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['brand_uuid'])")
 
 tofu import authentik_brand.internal $BRAND_UUID
 
+echo "token = \"$TOKEN\"" > terraform.tfvars
+
+tofu apply
 #+end_src
 
-* Terraform invalid x509
-After a bit of debuging i found that authentik by default uses its generated self-signed cert, and i need to update System => Brands default brand
+* Notes
+- Authentik uses its self-signed cert by default. Terraform sets the Vault-issued cert on the default brand via =web_certificate=.
+- Bootstrap token and =akadmin= password are in Vault at =kvv2/authentik=.
