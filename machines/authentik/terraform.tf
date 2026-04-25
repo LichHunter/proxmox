@@ -1,5 +1,4 @@
 terraform {
-  backend "http" {}
   required_version = "~> 1.10"
 
   required_providers {

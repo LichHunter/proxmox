@@ -1,4 +1,15 @@
 #+title: Readme
 
+* First Run
+#+begin_src bash
+# This should be taken from the vault
+TOKEN=
+
+BRAND_UUID=$(curl -sk -H "Authorization: Bearer $TOKEN" 'https://authentik.homelab.lan:9443/api/v3/core/brands/?default=true' | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['brand_uuid'])")
+
+tofu import authentik_brand.internal $BRAND_UUID
+
+#+end_src
+
 * Terraform invalid x509
 After a bit of debuging i found that authentik by default uses its generated self-signed cert, and i need to update System => Brands default brand

@@ -28,7 +28,6 @@ resource "authentik_rbac_role" "ldap_searchers" {
   name = "LDAP Search Role"
 }
 
-# Assign permission to the role (not individual users)
 resource "authentik_rbac_permission_role" "ldap_search" {
   role       = authentik_rbac_role.ldap_searchers.id
   permission = "search_full_directory"

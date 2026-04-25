@@ -1,6 +1,7 @@
 provider "authentik" {
-  url   = "https://authentik.homelab.lan:9443"
-  token = var.token
+  url      = "https://authentik.homelab.lan:9443"
+  token    = var.token
+  insecure = true
 }
 
 data "authentik_certificate_key_pair" "homelab" {
@@ -60,7 +61,6 @@ resource "authentik_policy_binding" "ldap_access_for_opnsense" {
   enabled = true
 }
 
-# Configure default brand to use custom authentication flow
 resource "authentik_brand" "internal" {
   domain              = "authentik.homelab.lan"
   branding_title      = "authentik"

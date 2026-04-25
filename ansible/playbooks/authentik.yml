@@ -73,24 +73,34 @@
         status_code: [200, 404]
       register: authentik_secrets_check
 
-    - name: Create Authentik secrets in Vault
-      when: authentik_secrets_check.status == 404
-      community.hashi_vault.vault_kv2_write:
-        url: "{{ vault_addr }}"
-        token: "{{ vault_token }}"
-        engine_mount_point: kvv2
-        path: authentik
-        data:
-          pg_pass: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
-          secret_key: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
-
-    - name: Read Authentik secrets from Vault
+    - name: Read existing Authentik secrets from Vault
       community.hashi_vault.vault_kv2_get:
         url: "{{ vault_addr }}"
         token: "{{ vault_token }}"
         engine_mount_point: kvv2
         path: authentik
       register: authentik_secrets
+      when: authentik_secrets_check.status == 200
+
+    - name: Build complete secrets (merge existing with defaults for missing fields)
+      ansible.builtin.set_fact:
+        authentik_secrets_data:
+          pg_pass: "{{ (authentik_secrets.secret.pg_pass | default('')) or lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+          secret_key: "{{ (authentik_secrets.secret.secret_key | default('')) or lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+          bootstrap_password: "{{ (authentik_secrets.secret.bootstrap_password | default('')) or lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+          bootstrap_token: "{{ (authentik_secrets.secret.bootstrap_token | default('')) or lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+      no_log: true
+
+    - name: Write Authentik secrets to Vault
+      community.hashi_vault.vault_kv2_write:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        engine_mount_point: kvv2
+        path: authentik
+        data: "{{ authentik_secrets_data }}"
+      when: >-
+        authentik_secrets_check.status == 404
+        or (authentik_secrets.secret | default({})).keys() | list | sort != authentik_secrets_data.keys() | list | sort
 
     - name: Create Authentik docker folder
       ansible.builtin.file:
@@ -107,5 +117,31 @@
       community.docker.docker_compose_v2:
         project_src: /root/authentik
       environment:
-        PG_PASS: "{{ authentik_secrets.secret.pg_pass }}"
-        AUTHENTIK_SECRET_KEY: "{{ authentik_secrets.secret.secret_key }}"
+        PG_PASS: "{{ authentik_secrets_data.pg_pass }}"
+        AUTHENTIK_SECRET_KEY: "{{ authentik_secrets_data.secret_key }}"
+        AUTHENTIK_BOOTSTRAP_PASSWORD: "{{ authentik_secrets_data.bootstrap_password }}"
+        AUTHENTIK_BOOTSTRAP_TOKEN: "{{ authentik_secrets_data.bootstrap_token }}"
+
+    - name: Wait for Authentik blueprints to finish
+      ansible.builtin.uri:
+        url: "https://authentik.homelab.lan:9443/api/v3/flows/instances/?search=default-provider"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ authentik_secrets_data.bootstrap_token }}"
+        validate_certs: false
+      register: authentik_flows_check
+      until: (authentik_flows_check.json.pagination.count | default(0)) > 0
+      retries: 30
+      delay: 5
+
+    - name: Import certificate into Authentik
+      ansible.builtin.command:
+        cmd: >-
+          docker exec authentik-worker-1 ak import_certificate
+          --certificate /certs/authentik.homelab.lan.crt
+          --private-key /certs/authentik.homelab.lan.key
+          --name authentik.homelab.lan
+      register: import_cert_result
+      changed_when: "'Created' in import_cert_result.stdout"
+
+
