@@ -8,6 +8,20 @@ output "vault_public_key" {
 }
 
 output "vault_password" {
-  value     = random_password.vault_password.result
+  value     = random_password.root_ca_password.result
+  sensitive = true
+}
+
+output "root_ca_private_key" {
+  value     = tls_private_key.root_ca_key.private_key_pem
+  sensitive = true
+}
+
+output "root_ca_public_key" {
+  value = tls_private_key.root_ca_key.public_key_openssh
+}
+
+output "root_ca_password" {
+  value     = random_password.root_ca_password.result
   sensitive = true
 }

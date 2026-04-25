@@ -73,6 +73,68 @@ resource "random_password" "vault_password" {
   special          = true
 }
 
+resource "proxmox_virtual_environment_container" "root_ca_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 201
+  tags         = ["terraform_created", "ansible_managed", "vault"]
+  unprivileged = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 4
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  initialization {
+    hostname = "root-ca"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.1.51/24"
+        gateway = "192.168.1.1"
+      }
+    }
+
+    dns {
+      domain  = "homelab.lan"
+      servers = ["192.168.1.2"]
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.root_ca_key.public_key_openssh)
+      ]
+      password = random_password.root_ca_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.debian_13_lxc_img.id
+    type             = "debian"
+  }
+}
+
+resource "tls_private_key" "root_ca_key" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "random_password" "root_ca_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
 resource "proxmox_virtual_environment_vm" "opensense" {
   vm_id       = 400
   node_name   = var.node_name
