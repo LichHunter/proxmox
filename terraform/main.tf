@@ -25,7 +25,11 @@ resource "proxmox_virtual_environment_container" "vault_container" {
 
   disk {
     datastore_id = var.datastore_id
-    size         = 4
+    size         = 10
+  }
+
+  memory {
+    dedicated = 2048
   }
 
   initialization {
@@ -78,7 +82,7 @@ resource "proxmox_virtual_environment_container" "root_ca_container" {
 
   node_name    = var.node_name
   vm_id        = 201
-  tags         = ["terraform_created", "ansible_managed", "vault"]
+  tags         = ["terraform_created", "ansible_managed", "root_ca"]
   unprivileged = true
 
   disk {
@@ -87,7 +91,7 @@ resource "proxmox_virtual_environment_container" "root_ca_container" {
   }
 
   memory {
-    dedicated = 2048
+    dedicated = 256
   }
 
   initialization {
