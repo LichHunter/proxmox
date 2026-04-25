@@ -1,0 +1,21 @@
+---
+- name: Install zsh, git, and curl
+  ansible.builtin.apt:
+    name:
+      - zsh
+      - git
+      - curl
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install oh-my-zsh
+  ansible.builtin.shell: |
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  args:
+    creates: "{{ ansible_env.HOME }}/.oh-my-zsh"
+
+- name: Set zsh as default shell
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    shell: /bin/zsh

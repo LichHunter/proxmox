@@ -1,0 +1,154 @@
+#+TITLE: Homelab Zero-Trust Infrastructure Architecture
+#+AUTHOR: DevOps Team
+#+DATE: 2025-11-22
+#+OPTIONS: toc:t num:t
+
+* Executive Summary
+This document details the architecture for a micro-segmented, secure homelab environment designed for dynamic workloads. The system utilizes **Proxmox** for compute, **OPNsense** for network segmentation, **Vault** for dynamic secrets, and **Authentik** for Identity Management.
+The core design principle is **Zero Trust**: no implicit trust between network segments, and strict "East-West" traffic control.
+
+* 1. Network Architecture
+We utilize a **Hub-and-Spoke** network topology with a DMZ. Traffic is segmented into VLANs managed by OPNsense.
+
+** 1.1 VLAN Segmentation Strategy
+| VLAN ID | Name          | Subnet         | Trust Level | Purpose                                      |
+|---------+---------------+----------------+-------------+----------------------------------------------|
+| *10*    | **DMZ**       | 192.168.10.0/24| Low         | Ingress Point. Contains Proxy & Jumpbox.     |
+| *20*    | **Mgmt/Core** | 192.168.20.0/24| High        | Control Plane (Vault, Authentik, DNS).       |
+| *30*    | **Workloads** | 192.168.30.0/24| Medium      | Dynamic Application Runners (Ephemeral).     |
+| *40*    | **Data**      | 192.168.40.0/24| Critical    | Persistence Layer (MongoDB, Redis, Postgres).|
+
+** 1.2 Firewall Policy (OPNsense)
+- **Default Policy:** Deny All.
+- **Ingress (WAN):** Allow Ports 80/443 to Nginx (DMZ) and Port 22 to Jumpbox (DMZ).
+- **Inter-VLAN:**
+  - DMZ $\to$ Core: Allowed on specific ports (8200, 9000, 9443) via Reverse Proxy.
+  - Workloads $\to$ Core: Allowed TCP 8200 (Vault) only.
+  - Workloads $\to$ Data: Allowed TCP 27017 (Mongo) only.
+  - Core $\to$ Data: Allowed TCP 27017 (Vault Admin Access).
+
+* 2. Compute & Virtualization (Proxmox)
+Workloads run as LXC containers or VMs.
+
+** 2.1 LXC Configuration Fixes
+To support Docker-in-LXC (required for Authentik/Vault) and fix the `mount src=proc permission denied` error caused by recent AppArmor/Containerd conflicts:
+
+1. **Enable Nesting:** Proxmox UI $\to$ Options $\to$ Features $\to$ Check "Nesting" & "Keyctl".
+2. **AppArmor Bypass (Host Level):**
+   Edit `/etc/pve/lxc/CTID.conf`:
+   #+BEGIN_SRC conf
+   lxc.apparmor.profile: unconfined
+   #+END_SRC
+   /Alternatively, downgrade containerd.io to version < 1.7.28 inside the container./
+
+* 3. Core Services Implementation
+
+** 3.1 Secure Gateway (Nginx)
+Located in **DMZ**. terminates SSL (`*.homelab.com`).
+- **Configuration:** Maps subdomains to internal IPs via Ansible templates.
+- **SSL:** Wildcard certs mounted RO.
+
+** 3.2 SSH Jumpbox
+Located in **DMZ**. The single source of truth for SSH access.
+- **User:** `developer` (No root login).
+- **Config:** `AllowTcpForwarding yes` (Essential for tunneling).
+- **Developer Workflow:** `ssh -J developer@jump.homelab.com user@app-internal`
+
+** 3.3 Identity Provider (Authentik)
+Located in **Core**.
+- **Permission Fix:** Authentik runs as UID 1000.
+- **Certificates:** Must be mounted as read-only (`:ro`) but readable by others (`chmod 644` on host) OR run container with `user: 1000:1000`.
+- **Service Account:** "Terraform" user created with Superuser privileges for IaC management.
+
+* 4. Secrets Management & Data Access
+We implement the **Dynamic Secrets Triangle**.
+
+** 4.1 The Triangle of Trust
+1. **Control Plane (Vault $\to$ Mongo):** Vault connects as Admin to create ephemeral users.
+2. **Auth Plane (App $\to$ Vault):** App authenticates via **AppRole**.
+   - `RoleID` + `SecretID` injected by Terraform during provisioning.
+   - App requests "Database Creds".
+3. **Data Plane (App $\to$ Mongo):** App connects using the temporary credentials provided by Vault.
+
+** 4.2 Vault Architecture
+- **Engine:** Database Secrets Engine (MongoDB).
+- **TTL:** Short leases (e.g., 15 mins) to ensure revocation if dynamic machines are destroyed.
+
+* 5. CI/CD Strategy (GitLab)
+We utilize the **Internal Execution Plane (Pull Model)** to avoid exposing internal APIs to the WAN.
+
+** 5.1 Component: Self-Hosted Runner
+- **Location:** VLAN 20 (Core).
+- **Network Access:**
+  - **Outbound:** HTTPS (443) to `gitlab.com`.
+  - **Inbound:** NONE from WAN.
+  - **Internal:** Full access to Proxmox API (8006) and Vault API (8200).
+- **State Management:** Terraform State is stored remotely in GitLab (HTTP Backend).
+
+** 5.2 Workflow
+1. Dev pushes code to GitLab SaaS.
+2. GitLab assigns job to Internal Runner.
+3. Runner pulls code.
+4. Runner executes `terraform apply` against local Proxmox/Vault APIs.
+5. Runner pushes logs back to GitLab.
+
+* 6. Architectural Diagrams
+** 6.1 C4 Container Diagram (Mermaid)
+
+#+BEGIN_SRC mermaid :file architecture.png
+C4Context
+    title Homelab Zero-Trust Architecture
+
+    %% -- External --
+    Boundary(wan, "WAN / Internet", "External") {
+        Person(user, "User / Dev", "External Access")
+        System(gitlab, "GitLab SaaS", "CI/CD Orchestrator")
+    }
+
+    %% -- Homelab Boundary --
+    Boundary(homelab, "Homelab Infrastructure", "Proxmox Host") {
+
+        %% -- VLAN 10: DMZ --
+        Boundary(vlan10, "VLAN 10: DMZ", "Ingress Layer") {
+            System(nginx, "Nginx Gateway", "Reverse Proxy (443)")
+            System(jump, "Jumpbox", "SSH Bastion (22)")
+        }
+
+        %% -- VLAN 20: Core --
+        Boundary(vlan20, "VLAN 20: Core", "Management Layer") {
+            System(vault, "Vault", "Secrets & Certificates")
+            System(auth, "Authentik", "Identity Provider")
+            System(runner, "GitLab Runner", "Terraform Executor")
+        }
+
+        %% -- VLAN 30: Workloads --
+        Boundary(vlan30, "VLAN 30: Workloads", "Dynamic Layer") {
+            Container(app, "Dynamic App", "Node/Python", "Ephemeral VM/LXC")
+        }
+
+        %% -- VLAN 40: Data --
+        Boundary(vlan40, "VLAN 40: Data", "Persistence Layer") {
+            SystemDb(mongo, "MongoDB", "NoSQL Store")
+        }
+    }
+
+    %% -- Traffic Flows --
+    Rel(user, nginx, "HTTPS Request", "443")
+    Rel(user, jump, "SSH Tunnel", "22")
+
+    %% CI/CD Flow
+    Rel(runner, gitlab, "Polls Jobs", "HTTPS Outbound")
+    Rel(runner, vault, "Configures", "TCP 8200")
+
+    %% Gateway Routing
+    Rel(nginx, auth, "Proxies", "Internal 9443")
+    Rel(nginx, vault, "Proxies", "Internal 8200")
+
+    %% Secrets Triangle
+    Rel(app, vault, "1. Auth (AppRole)", "TCP 8200")
+    Rel(vault, mongo, "2. Create Temp User", "TCP 27017")
+    Rel(app, mongo, "3. Access Data", "TCP 27017")
+
+    %% SSH Jump Flow
+    Rel(jump, app, "SSH Access", "Internal 22")
+#+END_SRC

@@ -1,0 +1,602 @@
+---
+# =============================================================================
+# PKI Bootstrap Playbook
+#
+# Single entrypoint: ansible-playbook playbooks/vault.yml
+# Always run from the top — fully idempotent.
+# =============================================================================
+
+# =============================================================================
+# PRE-FLIGHT: Determine if CA machine is needed
+# =============================================================================
+- name: "Pre-flight: Check PKI state"
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tags: [preflight, always]
+  tasks:
+    - name: Check if intermediate CA is healthy
+      ansible.builtin.uri:
+        url: "https://192.168.1.50:8200/v1/intermediate_ca/ca/pem"
+        method: GET
+        validate_certs: false
+      register: intermediate_ca_check
+      failed_when: false
+      ignore_errors: true
+
+    - name: Determine if CA machine is needed
+      ansible.builtin.set_fact:
+        ca_machine_needed: "{{ (intermediate_ca_check.status | default(-1)) != 200 }}"
+
+    - name: Ensure CA machine is running
+      when: ca_machine_needed
+      block:
+        - name: Start CA container on Proxmox
+          ansible.builtin.shell:
+            cmd: /usr/sbin/pct start 201
+          delegate_to: pve
+          connection: ssh
+          register: pct_start_result
+          failed_when:
+            - pct_start_result.rc != 0
+            - "'already running' not in (pct_start_result.stderr | default(''))"
+          changed_when: pct_start_result.rc == 0
+
+        - name: Wait for CA machine SSH
+          ansible.builtin.wait_for:
+            host: 192.168.1.51
+            port: 22
+            timeout: 60
+
+# =============================================================================
+# PLAY 1: CA machine — Generate root CA, intermediate CA, vault server cert
+# =============================================================================
+- name: "Play 1: Certificate Authority"
+  hosts: root_ca
+  gather_facts: true
+  tags: [root_ca]
+  roles:
+    - zsh
+  vars:
+    root_ca_passphrase: "{{ lookup('password', playbook_dir ~ '/../../.secrets/root_ca_passphrase length=32') }}"
+    root_ca_dir: /root/ca
+    vault_fqdn: "vault.homelab.lan"
+  tasks:
+    - name: Skip if PKI already healthy
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost'].ca_machine_needed | bool)
+
+    - name: Install python3-cryptography
+      ansible.builtin.apt:
+        name: python3-cryptography
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create CA directory
+      ansible.builtin.file:
+        path: "{{ root_ca_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    # --------------------------------------------------
+    # Root CA
+    # --------------------------------------------------
+    - name: Check if root CA certificate already exists
+      ansible.builtin.stat:
+        path: "{{ root_ca_dir }}/root.crt"
+      register: root_ca_cert_stat
+
+    - name: Generate root CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ root_ca_dir }}/root.key"
+        type: RSA
+        size: 4096
+        passphrase: "{{ root_ca_passphrase }}"
+        cipher: auto
+        owner: root
+        group: root
+        mode: "0600"
+      when: not root_ca_cert_stat.stat.exists
+
+    - name: Generate root CA CSR
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ root_ca_dir }}/root.key"
+        privatekey_passphrase: "{{ root_ca_passphrase }}"
+        common_name: "Homelab Root CA"
+        organization_name: "Homelab"
+        basic_constraints:
+          - "CA:TRUE"
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+          - cRLSign
+        key_usage_critical: true
+      register: root_ca_csr
+      when: not root_ca_cert_stat.stat.exists
+
+    - name: Self-sign root CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ root_ca_dir }}/root.crt"
+        csr_content: "{{ root_ca_csr.csr }}"
+        privatekey_path: "{{ root_ca_dir }}/root.key"
+        privatekey_passphrase: "{{ root_ca_passphrase }}"
+        provider: selfsigned
+        selfsigned_not_after: "+3650d"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not root_ca_cert_stat.stat.exists
+
+    # --------------------------------------------------
+    # Intermediate CA
+    # --------------------------------------------------
+    - name: Check if intermediate CA certificate already exists
+      ansible.builtin.stat:
+        path: "{{ root_ca_dir }}/intermediate.crt"
+      register: intermediate_cert_stat
+
+    - name: Generate intermediate CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ root_ca_dir }}/intermediate.key"
+        type: RSA
+        size: 4096
+        owner: root
+        group: root
+        mode: "0600"
+      when: not intermediate_cert_stat.stat.exists
+
+    - name: Generate intermediate CA CSR
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ root_ca_dir }}/intermediate.key"
+        common_name: "Homelab Intermediate CA"
+        organization_name: "Homelab"
+        basic_constraints:
+          - "CA:TRUE"
+          - "pathlen:0"
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+          - cRLSign
+        key_usage_critical: true
+      register: intermediate_csr
+      when: not intermediate_cert_stat.stat.exists
+
+    - name: Sign intermediate CA with root CA
+      community.crypto.x509_certificate:
+        path: "{{ root_ca_dir }}/intermediate.crt"
+        csr_content: "{{ intermediate_csr.csr }}"
+        privatekey_path: "{{ root_ca_dir }}/intermediate.key"
+        provider: ownca
+        ownca_path: "{{ root_ca_dir }}/root.crt"
+        ownca_privatekey_path: "{{ root_ca_dir }}/root.key"
+        ownca_privatekey_passphrase: "{{ root_ca_passphrase }}"
+        ownca_not_after: "+1825d"
+        ownca_not_before: "-1d"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not intermediate_cert_stat.stat.exists
+
+    # --------------------------------------------------
+    # Vault server certificate (signed by intermediate)
+    # --------------------------------------------------
+    - name: Check if Vault server certificate already exists
+      ansible.builtin.stat:
+        path: "{{ root_ca_dir }}/vault.crt"
+      register: vault_cert_stat
+
+    - name: Generate Vault server private key
+      community.crypto.openssl_privatekey:
+        path: "{{ root_ca_dir }}/vault.key"
+        type: RSA
+        size: 4096
+        owner: root
+        group: root
+        mode: "0600"
+      when: not vault_cert_stat.stat.exists
+
+    - name: Generate Vault server CSR
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ root_ca_dir }}/vault.key"
+        common_name: "{{ vault_fqdn }}"
+        subject_alt_name:
+          - "DNS:{{ vault_fqdn }}"
+          - "IP:192.168.1.50"
+          - "IP:127.0.0.1"
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        key_usage_critical: true
+        extended_key_usage:
+          - serverAuth
+      register: vault_server_csr
+      when: not vault_cert_stat.stat.exists
+
+    - name: Sign Vault server certificate with intermediate CA
+      community.crypto.x509_certificate:
+        path: "{{ root_ca_dir }}/vault.crt"
+        csr_content: "{{ vault_server_csr.csr }}"
+        privatekey_path: "{{ root_ca_dir }}/vault.key"
+        provider: ownca
+        ownca_path: "{{ root_ca_dir }}/intermediate.crt"
+        ownca_privatekey_path: "{{ root_ca_dir }}/intermediate.key"
+        ownca_not_after: "+365d"
+        ownca_not_before: "-1d"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not vault_cert_stat.stat.exists
+
+    # --------------------------------------------------
+    # Read all certs for use by later plays
+    # --------------------------------------------------
+    - name: Read root CA certificate
+      ansible.builtin.slurp:
+        src: "{{ root_ca_dir }}/root.crt"
+      register: root_ca_cert_slurp
+
+    - name: Read intermediate CA certificate
+      ansible.builtin.slurp:
+        src: "{{ root_ca_dir }}/intermediate.crt"
+      register: intermediate_cert_slurp
+
+    - name: Read intermediate CA private key
+      ansible.builtin.slurp:
+        src: "{{ root_ca_dir }}/intermediate.key"
+      register: intermediate_key_slurp
+
+    - name: Read Vault server certificate
+      ansible.builtin.slurp:
+        src: "{{ root_ca_dir }}/vault.crt"
+      register: vault_cert_slurp
+
+    - name: Read Vault server private key
+      ansible.builtin.slurp:
+        src: "{{ root_ca_dir }}/vault.key"
+      register: vault_key_slurp
+
+    - name: Store certificate facts
+      ansible.builtin.set_fact:
+        root_ca_cert: "{{ root_ca_cert_slurp.content | b64decode }}"
+        intermediate_cert: "{{ intermediate_cert_slurp.content | b64decode }}"
+        intermediate_key: "{{ intermediate_key_slurp.content | b64decode }}"
+        vault_server_cert: "{{ vault_cert_slurp.content | b64decode }}"
+        vault_server_key: "{{ vault_key_slurp.content | b64decode }}"
+      no_log: true
+
+# =============================================================================
+# PLAY 2: Vault — Deploy certs, install, init, unseal, import intermediate
+# =============================================================================
+- name: "Play 2: Vault setup"
+  hosts: vault
+  gather_facts: true
+  tags: [vault]
+  roles:
+    - zsh
+    - tofu
+  vars:
+    vault_fqdn: "vault.homelab.lan"
+    vault_port: 8200
+    vault_tls_path: /opt/vault/tls
+    vault_storage_path: /opt/vault/data
+    root_ca_host: proxmox_virtual_environment_container_root_ca_container
+    vault_env: &vault_env
+      VAULT_ADDR: "https://127.0.0.1:8200"
+      VAULT_CACERT: /opt/vault/tls/ca-chain.crt
+  tasks:
+    # --------------------------------------------------
+    # Install Vault (creates vault user/group)
+    # --------------------------------------------------
+    - name: Add HashiCorp repository
+      ansible.builtin.deb822_repository:
+        name: hashicorp
+        types: [deb]
+        uris: "https://apt.releases.hashicorp.com"
+        components: [main]
+        signed_by: https://apt.releases.hashicorp.com/gpg
+        state: present
+        enabled: true
+        suites: "{{ ansible_distribution_release }}"
+
+    - name: Install Vault
+      ansible.builtin.apt:
+        name: vault
+        state: present
+        update_cache: true
+
+    # --------------------------------------------------
+    # Deploy certificates from CA machine
+    # --------------------------------------------------
+    - name: Create TLS directory
+      ansible.builtin.file:
+        path: "{{ vault_tls_path }}"
+        state: directory
+        owner: vault
+        group: vault
+        mode: "0750"
+
+    - name: Check if certificates already deployed
+      ansible.builtin.stat:
+        path: "{{ vault_tls_path }}/ca-chain.crt"
+      register: ca_chain_stat
+
+    - name: Deploy certificates from CA machine
+      when: not ca_chain_stat.stat.exists
+      block:
+        - name: Deploy CA chain (intermediate + root)
+          ansible.builtin.copy:
+            content: "{{ hostvars[root_ca_host].intermediate_cert }}{{ hostvars[root_ca_host].root_ca_cert }}"
+            dest: "{{ vault_tls_path }}/ca-chain.crt"
+            owner: vault
+            group: vault
+            mode: "0644"
+
+        - name: Deploy Vault server certificate
+          ansible.builtin.copy:
+            content: "{{ hostvars[root_ca_host].vault_server_cert }}"
+            dest: "{{ vault_tls_path }}/vault.crt"
+            owner: vault
+            group: vault
+            mode: "0644"
+          notify: Restart Vault
+
+        - name: Deploy Vault server private key
+          ansible.builtin.copy:
+            content: "{{ hostvars[root_ca_host].vault_server_key }}"
+            dest: "{{ vault_tls_path }}/vault.key"
+            owner: vault
+            group: vault
+            mode: "0600"
+          no_log: true
+          notify: Restart Vault
+
+    # --------------------------------------------------
+    # Configure and start Vault
+    # --------------------------------------------------
+    - name: Create Vault data directory
+      ansible.builtin.file:
+        path: "{{ vault_storage_path }}"
+        state: directory
+        owner: vault
+        group: vault
+        mode: "0750"
+
+    - name: Template Vault configuration
+      ansible.builtin.template:
+        src: ../templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: vault
+        group: vault
+        mode: "0640"
+      notify: Restart Vault
+
+    - name: Enable and start Vault service
+      ansible.builtin.systemd:
+        name: vault
+        enabled: true
+        state: started
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait for Vault to be ready
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ vault_port }}"
+        timeout: 30
+
+    # --------------------------------------------------
+    # Initialize Vault
+    # --------------------------------------------------
+    - name: Check Vault initialization status
+      ansible.builtin.command:
+        cmd: vault status -format json
+      environment: *vault_env
+      register: vault_status_pre_init
+      failed_when: false
+      changed_when: false
+
+    - name: Initialize Vault
+      when: >-
+        vault_status_pre_init.stdout == ''
+        or not (vault_status_pre_init.stdout | from_json).initialized | default(false)
+      block:
+        - name: Run vault operator init
+          ansible.builtin.command:
+            cmd: vault operator init -format json
+          environment: *vault_env
+          register: vault_init_result
+          changed_when: vault_init_result.rc == 0
+
+        - name: Save init data to controller
+          ansible.builtin.copy:
+            content: "{{ vault_init_result.stdout | from_json | to_nice_json(indent=2) }}"
+            dest: "{{ playbook_dir }}/../../.secrets/vault_init_data.json"
+            mode: "0600"
+          delegate_to: localhost
+          no_log: true
+
+    - name: Read init data from controller
+      ansible.builtin.set_fact:
+        vault_init_data: "{{ lookup('file', playbook_dir ~ '/../../.secrets/vault_init_data.json') | from_json }}"
+      no_log: true
+
+    # --------------------------------------------------
+    # Unseal Vault
+    # --------------------------------------------------
+    - name: Check Vault seal status
+      ansible.builtin.command:
+        cmd: vault status -format json
+      environment: *vault_env
+      register: vault_status_result
+      failed_when: false
+      changed_when: false
+
+    - name: Unseal Vault
+      ansible.builtin.command:
+        cmd: "vault operator unseal {{ item }}"
+      environment: *vault_env
+      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+      no_log: true
+      changed_when: false
+      when: (vault_status_result.stdout | from_json).sealed | default(true)
+
+    # --------------------------------------------------
+    # Import intermediate CA into Vault
+    # --------------------------------------------------
+    - name: Check if intermediate CA already exists in Vault
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:8200/v1/intermediate_ca/ca/pem"
+        validate_certs: false
+        return_content: true
+      register: intermediate_ca_check
+      failed_when: false
+
+    - name: Import intermediate CA into Vault
+      when: intermediate_ca_check.status != 200
+      environment:
+        <<: *vault_env
+        VAULT_TOKEN: "{{ vault_init_data.root_token }}"
+      no_log: true
+      block:
+        - name: Enable PKI secrets engine for intermediate CA
+          ansible.builtin.command:
+            cmd: vault secrets enable -path=intermediate_ca pki
+          register: enable_pki_result
+          failed_when:
+            - enable_pki_result.rc != 0
+            - "'path is already in use' not in (enable_pki_result.stderr | default(''))"
+          changed_when: enable_pki_result.rc == 0
+
+        - name: Tune intermediate CA max TTL
+          ansible.builtin.command:
+            cmd: vault secrets tune -max-lease-ttl=157680000s intermediate_ca
+
+        - name: Build PEM bundle (intermediate cert + key + root cert)
+          ansible.builtin.set_fact:
+            pem_bundle: "{{ hostvars[root_ca_host].intermediate_cert }}{{ hostvars[root_ca_host].intermediate_key }}{{ hostvars[root_ca_host].root_ca_cert }}"
+
+        - name: Import intermediate CA bundle into Vault
+          ansible.builtin.command:
+            cmd: vault write intermediate_ca/issuers/import/bundle pem_bundle=-
+            stdin: "{{ pem_bundle }}"
+          changed_when: true
+
+  handlers:
+    - name: Restart Vault
+      ansible.builtin.systemd:
+        name: vault
+        state: restarted
+
+# =============================================================================
+# PLAY 3: Clone Terraform vault config and apply
+# =============================================================================
+- name: "Play 3: Terraform apply"
+  hosts: vault
+  gather_facts: false
+  tags: [terraform]
+  vars:
+    vault_env: &vault_env_p3
+      VAULT_ADDR: "https://127.0.0.1:8200"
+      VAULT_CACERT: /opt/vault/tls/ca-chain.crt
+      VAULT_TOKEN: "{{ lookup('file', playbook_dir ~ '/../../.secrets/vault_init_data.json') | from_json | json_query('root_token') }}"
+    gitea_token: "{{ lookup('file', playbook_dir ~ '/../../.secrets/gitea_token') }}"
+    gitea_api_url: "https://gitea.susano-homelab.duckdns.org/api/v1"
+    gitea_repo_ssh: "ssh://gitea@gitea.susano-homelab.duckdns.org:2222/fujin/Proxmox-Vault.git"
+  tasks:
+    - name: Generate SSH deploy key for Gitea
+      community.crypto.openssh_keypair:
+        path: /root/.ssh/gitea_deploy_key
+        type: ed25519
+      register: deploy_key
+
+    - name: List existing deploy keys on Gitea
+      ansible.builtin.uri:
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys"
+        method: GET
+        headers:
+          Authorization: "token {{ gitea_token }}"
+        validate_certs: false
+      register: existing_keys
+
+    - name: Remove stale deploy key from Gitea
+      ansible.builtin.uri:
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys/{{ item.id }}"
+        method: DELETE
+        headers:
+          Authorization: "token {{ gitea_token }}"
+        status_code: [204, 404]
+        validate_certs: false
+      loop: "{{ existing_keys.json }}"
+      when: item.title == 'vault-ansible-deploy' and item.key != deploy_key.public_key
+
+    - name: Add deploy key to Gitea repository
+      ansible.builtin.uri:
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys"
+        method: POST
+        headers:
+          Authorization: "token {{ gitea_token }}"
+        body_format: json
+        body:
+          title: "vault-ansible-deploy"
+          key: "{{ deploy_key.public_key }}"
+          read_only: true
+        status_code: [201, 422]
+        validate_certs: false
+
+    - name: Clone Terraform vault repository
+      ansible.builtin.git:
+        repo: "{{ gitea_repo_ssh }}"
+        dest: /root/Proxmox-Vault
+        version: master
+        key_file: /root/.ssh/gitea_deploy_key
+        accept_newhostkey: true
+        force: true
+
+    - name: Run tofu init
+      ansible.builtin.command:
+        cmd: tofu init
+        chdir: /root/Proxmox-Vault
+      environment: *vault_env_p3
+      changed_when: false
+
+    - name: Run tofu apply
+      ansible.builtin.command:
+        cmd: tofu apply -auto-approve
+        chdir: /root/Proxmox-Vault
+      environment: *vault_env_p3
+      no_log: true
+      register: tofu_apply_result
+      changed_when: "'Apply complete!' in tofu_apply_result.stdout"
+
+# =============================================================================
+# PLAY 4: Shutdown CA machine
+# =============================================================================
+- name: "Play 4: Shutdown CA"
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tags: [shutdown_ca]
+  tasks:
+    - name: Skip if CA was not needed
+      ansible.builtin.meta: end_play
+      when: not (hostvars['localhost'].ca_machine_needed | default(false) | bool)
+
+    - name: Verify intermediate CA is functional
+      ansible.builtin.uri:
+        url: "https://192.168.1.50:8200/v1/intermediate_ca/ca/pem"
+        validate_certs: false
+
+    - name: Stop CA container on Proxmox
+      ansible.builtin.shell:
+        cmd: /usr/sbin/pct stop 201
+      delegate_to: pve
+      connection: ssh
+      register: pct_stop_result
+      failed_when:
+        - pct_stop_result.rc != 0
+        - "'not running' not in (pct_stop_result.stderr | default(''))"
+      changed_when: pct_stop_result.rc == 0

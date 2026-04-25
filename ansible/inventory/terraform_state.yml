@@ -15,6 +15,7 @@ compose:
   ansible_host: initialization.0.ip_config.0.ipv4.0.address | regex_replace('/.*', '')
   ansible_user: "'root'"
   ansible_python_interpreter: "'/usr/bin/python3'"
+  ansible_ssh_private_key_file: "'/home/fujin/Code/proxmox/.secrets/' ~ initialization.0.hostname ~ '_key'"
 
 keyed_groups:
   - key: tags

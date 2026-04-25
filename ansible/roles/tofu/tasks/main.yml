@@ -1,0 +1,38 @@
+---
+- name: Install prerequisites for OpenTofu
+  ansible.builtin.apt:
+    name:
+      - gnupg
+      - curl
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Download OpenTofu GPG key
+  ansible.builtin.get_url:
+    url: https://get.opentofu.org/opentofu.gpg
+    dest: /etc/apt/keyrings/opentofu.gpg
+    mode: "0644"
+
+- name: Download OpenTofu repo GPG key
+  ansible.builtin.get_url:
+    url: https://packages.opentofu.org/opentofu/tofu/gpgkey
+    dest: /etc/apt/keyrings/opentofu-repo.asc
+    mode: "0644"
+
+- name: Add OpenTofu repository
+  ansible.builtin.deb822_repository:
+    name: opentofu
+    types: [deb]
+    uris: "https://packages.opentofu.org/opentofu/tofu/any/"
+    suites: any
+    components: [main]
+    signed_by: /etc/apt/keyrings/opentofu.gpg /etc/apt/keyrings/opentofu-repo.asc
+    state: present
+    enabled: true
+
+- name: Install OpenTofu
+  ansible.builtin.apt:
+    name: tofu
+    state: present
+    update_cache: true
