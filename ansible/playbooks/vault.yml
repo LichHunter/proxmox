@@ -505,7 +505,7 @@
       VAULT_TOKEN: "{{ lookup('file', playbook_dir ~ '/../../.secrets/vault_init_data.json') | from_json | json_query('root_token') }}"
     gitea_token: "{{ lookup('file', playbook_dir ~ '/../../.secrets/gitea_token') }}"
     gitea_api_url: "https://gitea.susano-homelab.duckdns.org/api/v1"
-    gitea_repo_ssh: "ssh://gitea@gitea.susano-homelab.duckdns.org:2222/fujin/Proxmox-Vault.git"
+    gitea_repo_ssh: "ssh://gitea@gitea.susano-homelab.duckdns.org:2222/fujin/Proxmox.git"
   tasks:
     - name: Generate SSH deploy key for Gitea
       community.crypto.openssh_keypair:
@@ -515,7 +515,7 @@
 
     - name: List existing deploy keys on Gitea
       ansible.builtin.uri:
-        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys"
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox/keys"
         method: GET
         headers:
           Authorization: "token {{ gitea_token }}"
@@ -524,7 +524,7 @@
 
     - name: Remove stale deploy key from Gitea
       ansible.builtin.uri:
-        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys/{{ item.id }}"
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox/keys/{{ item.id }}"
         method: DELETE
         headers:
           Authorization: "token {{ gitea_token }}"
@@ -535,7 +535,7 @@
 
     - name: Add deploy key to Gitea repository
       ansible.builtin.uri:
-        url: "{{ gitea_api_url }}/repos/fujin/Proxmox-Vault/keys"
+        url: "{{ gitea_api_url }}/repos/fujin/Proxmox/keys"
         method: POST
         headers:
           Authorization: "token {{ gitea_token }}"
@@ -547,10 +547,10 @@
         status_code: [201, 422]
         validate_certs: false
 
-    - name: Clone Terraform vault repository
+    - name: Clone Proxmox repository
       ansible.builtin.git:
         repo: "{{ gitea_repo_ssh }}"
-        dest: /root/Proxmox-Vault
+        dest: /root/Proxmox
         version: master
         key_file: /root/.ssh/gitea_deploy_key
         accept_newhostkey: true
@@ -559,14 +559,14 @@
     - name: Run tofu init
       ansible.builtin.command:
         cmd: tofu init
-        chdir: /root/Proxmox-Vault
+        chdir: /root/Proxmox/machines/vault
       environment: *vault_env_p3
       changed_when: false
 
     - name: Run tofu apply
       ansible.builtin.command:
         cmd: tofu apply -auto-approve
-        chdir: /root/Proxmox-Vault
+        chdir: /root/Proxmox/machines/vault
       environment: *vault_env_p3
       no_log: true
       register: tofu_apply_result
