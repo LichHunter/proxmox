@@ -25,3 +25,17 @@ output "root_ca_password" {
   value     = random_password.root_ca_password.result
   sensitive = true
 }
+
+output "authentik_private_key" {
+  value     = tls_private_key.authentik_key.private_key_pem
+  sensitive = true
+}
+
+output "authentik_public_key" {
+  value = tls_private_key.authentik_key.public_key_openssh
+}
+
+output "authentik_password" {
+  value     = random_password.authentik_password.result
+  sensitive = true
+}

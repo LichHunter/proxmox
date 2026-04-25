@@ -50,6 +50,7 @@
             ansible-lint
             glab
             vault
+            python3Packages.hvac
 
             # Precommit stuff
             pre-commit

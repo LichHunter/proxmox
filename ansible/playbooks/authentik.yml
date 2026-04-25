@@ -1,0 +1,111 @@
+---
+- name: Install Authentik
+  hosts: authentik
+  gather_facts: true
+  become: false
+  roles:
+    - zsh
+    - docker
+  vars:
+    vault_addr: "https://vault.homelab.lan:8200"
+    vault_token: "{{ lookup('file', playbook_dir ~ '/../../.secrets/vault_init_data.json') | from_json | json_query('root_token') }}"
+  tasks:
+    - name: Ensure authentik certs directory exists
+      ansible.builtin.file:
+        path: /opt/authentik/certs
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Fetch AppRole role_id from Vault
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/auth/approle/role/authentik/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: false
+        return_content: true
+      register: authentik_role_id_response
+
+    - name: Generate AppRole secret_id from Vault
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/auth/approle/role/authentik/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        validate_certs: false
+        return_content: true
+      register: authentik_secret_id_response
+
+    - name: Configure Vault Agent for Authentik
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_common_name: "authentik.homelab.lan"
+        vault_agent_cert_filename: "authentik.homelab.lan"
+        vault_agent_cert_folder: "/opt/authentik/certs"
+        vault_agent_cert_ttl: "720h"
+        vault_agent_reload_service: "authentik-server"
+        vault_agent_reload_cmd: >-
+          /bin/bash -c '
+          docker exec authentik-worker-1 ak import_certificate
+          --certificate /certs/authentik.homelab.lan.crt
+          --private-key /certs/authentik.homelab.lan.key
+          --name authentik.homelab.lan
+          && docker restart authentik-server-1
+          && docker restart authentik-worker-1
+          '
+        vault_agent_role_id: "{{ authentik_role_id_response.json.data.role_id }}"
+        vault_agent_secret_id: "{{ authentik_secret_id_response.json.data.secret_id }}"
+
+    - name: Install python3-hvac
+      ansible.builtin.apt:
+        name: python3-hvac
+        state: present
+
+    - name: Check if Authentik secrets exist in Vault
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/kvv2/data/authentik"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        status_code: [200, 404]
+      register: authentik_secrets_check
+
+    - name: Create Authentik secrets in Vault
+      when: authentik_secrets_check.status == 404
+      community.hashi_vault.vault_kv2_write:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        engine_mount_point: kvv2
+        path: authentik
+        data:
+          pg_pass: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+          secret_key: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+
+    - name: Read Authentik secrets from Vault
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ vault_addr }}"
+        token: "{{ vault_token }}"
+        engine_mount_point: kvv2
+        path: authentik
+      register: authentik_secrets
+
+    - name: Create Authentik docker folder
+      ansible.builtin.file:
+        state: directory
+        path: /root/authentik
+
+    - name: Copy Authentik compose
+      ansible.builtin.template:
+        src: ../templates/authentik_compose.yaml.j2
+        dest: /root/authentik/compose.yaml
+        mode: '0600'
+
+    - name: Run docker compose up
+      community.docker.docker_compose_v2:
+        project_src: /root/authentik
+      environment:
+        PG_PASS: "{{ authentik_secrets.secret.pg_pass }}"
+        AUTHENTIK_SECRET_KEY: "{{ authentik_secrets.secret.secret_key }}"
