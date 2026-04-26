@@ -31,3 +31,13 @@ resource "proxmox_download_file" "opnsense_26_iso" {
   upload_timeout          = 300
   overwrite               = false
 }
+
+resource "proxmox_virtual_environment_file" "nixos_img" {
+  content_type = "vztmpl"
+  datastore_id = var.imagestore_id
+  node_name    = var.node_name
+
+  source_file {
+    path = "../result/tarball/nixos-image-lxc-proxmox-26.05.20260423.731cada-x86_64-linux.tar.xz"
+  }
+}

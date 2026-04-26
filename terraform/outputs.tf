@@ -39,3 +39,17 @@ output "authentik_password" {
   value     = random_password.authentik_password.result
   sensitive = true
 }
+
+output "nix_arr_private_key" {
+  value     = tls_private_key.nix_arr_key.private_key_pem
+  sensitive = true
+}
+
+output "nix_arr_public_key" {
+  value = tls_private_key.nix_arr_key.public_key_openssh
+}
+
+output "nix_arr_password" {
+  value     = random_password.nix_arr_password.result
+  sensitive = true
+}

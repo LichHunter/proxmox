@@ -1,0 +1,10 @@
+keys:
+  - &admin age19wvqtn4ju6k4vs8fxr34unl6xx4cv04jw0lx9ps20xlde927zfssgl4qke
+  - &nixarr age14pt6nt3wss4jxrfamh7p0hw4tf4xvcznu0luxva8c5kqxk469cxqv60cey
+
+creation_rules:
+  - path_regex: secrets/nixarr\.yaml$
+    key_groups:
+      - age:
+          - *admin
+          - *nixarr

@@ -7,3 +7,5 @@ tmp/
 .pre-commit-config.yaml
 
 .secrets/
+
+result

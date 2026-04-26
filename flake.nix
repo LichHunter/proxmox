@@ -1,67 +1,116 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
-    utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     git-hooks.url = "github:cachix/git-hooks.nix";
+    deploy-rs.url = "github:serokell/deploy-rs";
+    sops-nix.url = "github:Mic92/sops-nix";
   };
 
   outputs =
-    {
+    inputs@{
       self,
       nixpkgs,
-      utils,
+      flake-parts,
       git-hooks,
+      deploy-rs,
+      sops-nix,
     }:
-    utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
-          system = "x86_64-linux";
-          config.allowUnfree = true;
-        };
-        pre-commit-check = git-hooks.lib.${system}.run {
-          src = ./.;
-          hooks = {
-            nixfmt.enable = true;
-            ansible-lint = {
-              enable = true;
-              settings = {
-                configPath = "./ansible/ansible-lint";
-                subdir = "./ansible";
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+
+      perSystem =
+        {
+          system,
+          ...
+        }:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+
+          pre-commit-check = git-hooks.lib.${system}.run {
+            src = ./.;
+            hooks = {
+              nixfmt.enable = true;
+              ansible-lint = {
+                enable = true;
+                settings = {
+                  configPath = "./ansible/ansible-lint";
+                  subdir = "./ansible";
+                };
               };
+              tflint.enable = true;
+              terraform-format.enable = true;
             };
-            tflint.enable = true;
-            terraform-format.enable = true;
-            terraform-validate.enable = true;
+          };
+
+          lxcSystem = nixpkgs.lib.nixosSystem {
+            system = "x86_64-linux";
+            modules = [ ./templates/lxc-base.nix ];
+          };
+        in
+        {
+          checks = {
+            inherit pre-commit-check;
+          };
+
+          packages.lxc-template = lxcSystem.config.system.build.tarball;
+
+          devShells.default = pkgs.mkShell {
+            inherit (pre-commit-check) shellHook;
+
+            buildInputs = with pkgs; [
+              opentofu
+              ansible
+              ansible-lint
+              glab
+              vault
+              python3Packages.hvac
+              yq
+              sops
+              age
+              ssh-to-age
+
+              # Precommit stuff
+              pre-commit
+              gitleaks
+              tflint
+
+              opencode
+            ];
+
+            TF_STATE_NAME = "default";
           };
         };
-      in
-      {
-        checks = {
-          inherit pre-commit-check;
+
+      flake = {
+        nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [ ./machines/nixos/nixarr ];
         };
 
-        devShell = pkgs.mkShell {
-          inherit (pre-commit-check) shellHook;
-
-          buildInputs = with pkgs; [
-            opentofu
-            ansible
-            ansible-lint
-            glab
-            vault
-            python3Packages.hvac
-
-            # Precommit stuff
-            pre-commit
-            gitleaks
-            tflint
-
-            opencode
-          ];
-
-          TF_STATE_NAME = "default";
+        deploy.nodes.nixarr = {
+          hostname = "192.168.1.54";
+          profiles.system = {
+            user = "root";
+            sshUser = "root";
+            sshOpts = [
+              "-o"
+              "StrictHostKeyChecking=no"
+              "-i"
+              ".secrets/nixarr_key"
+            ];
+            path = deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations.nixos;
+          };
         };
-      }
-    );
+      };
+    };
 }

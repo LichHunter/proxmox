@@ -192,6 +192,72 @@ resource "random_password" "authentik_password" {
   special          = true
 }
 
+resource "proxmox_virtual_environment_container" "nix_arr_container" {
+  description = "Managed by Terraform"
+
+  node_name    = var.node_name
+  vm_id        = 203
+  tags         = ["terraform_created", "nixos", "nix-arr"]
+  unprivileged = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 50
+  }
+
+  memory {
+    dedicated = 4096
+  }
+
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "nix-arr"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.1.54/24"
+        gateway = "192.168.1.1"
+      }
+    }
+
+    dns {
+      domain  = "homelab.lan"
+      servers = ["192.168.1.2"]
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.nix_arr_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.nix_arr_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_file.nixos_img.id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "nix_arr_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "nix_arr_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
 ###
 # VMs
 ###

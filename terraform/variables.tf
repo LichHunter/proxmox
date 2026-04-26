@@ -27,3 +27,8 @@ variable "api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "admin_public_key" {
+  description = "Admin SSH public key added to managed containers"
+  type        = string
+}
