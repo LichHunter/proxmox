@@ -5,6 +5,7 @@
     git-hooks.url = "github:cachix/git-hooks.nix";
     deploy-rs.url = "github:serokell/deploy-rs";
     sops-nix.url = "github:Mic92/sops-nix";
+    nixarr.url = "github:LichHunter/nixarr";
   };
 
   outputs =
@@ -15,6 +16,7 @@
       git-hooks,
       deploy-rs,
       sops-nix,
+      nixarr,
     }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [

@@ -8,6 +8,7 @@
   imports = [
     (modulesPath + "/virtualisation/proxmox-lxc.nix")
     inputs.sops-nix.nixosModules.sops
+    inputs.nixarr.nixosModules.default
     ../modules/network.nix
   ];
 
@@ -37,10 +38,19 @@
       path = "/etc/vault/secret_id";
       mode = "0600";
     };
+    secrets."nixarr_wg_conf" = {
+      path = "/run/secrets/wg.conf";
+      mode = "0600";
+    };
   };
 
   # Ensure vault-agent starts after sops secrets are decrypted
   systemd.services.vault-agent-nixarr = {
+    after = [ "sops-nix.service" ];
+    wants = [ "sops-nix.service" ];
+  };
+
+  systemd.services.wg = {
     after = [ "sops-nix.service" ];
     wants = [ "sops-nix.service" ];
   };
@@ -77,13 +87,13 @@
 
       template = [
         {
-          source = "/etc/vault/templates/nix-arr.homelab.lan.crt.ctmpl";
-          destination = "/etc/ssl/certs/nix-arr.homelab.lan.crt";
+          source = "/etc/vault/templates/nixarr.homelab.lan.crt.ctmpl";
+          destination = "/etc/ssl/certs/nixarr.homelab.lan.crt";
           perms = "0644";
         }
         {
-          source = "/etc/vault/templates/nix-arr.homelab.lan.key.ctmpl";
-          destination = "/etc/ssl/certs/nix-arr.homelab.lan.key";
+          source = "/etc/vault/templates/nixarr.homelab.lan.key.ctmpl";
+          destination = "/etc/ssl/certs/nixarr.homelab.lan.key";
           perms = "0600";
         }
       ];
@@ -98,8 +108,30 @@
   # Vault CA cert and consul-template files
   environment.etc = {
     "ssl/certs/vault-ca-chain.pem".source = ../../../certs/vault-ca-chain.pem;
-    "vault/templates/nix-arr.homelab.lan.crt.ctmpl".source = ./templates/nix-arr.homelab.lan.crt.ctmpl;
-    "vault/templates/nix-arr.homelab.lan.key.ctmpl".source = ./templates/nix-arr.homelab.lan.key.ctmpl;
+    "vault/templates/nixarr.homelab.lan.crt.ctmpl".source = ./templates/nixarr.homelab.lan.crt.ctmpl;
+    "vault/templates/nixarr.homelab.lan.key.ctmpl".source = ./templates/nixarr.homelab.lan.key.ctmpl;
+  };
+
+  nixarr = {
+    enable = true;
+    mediaDir = "/media/data";
+    stateDir = "/media/data/.state/nixarr";
+
+    vpn = {
+      enable = true;
+      wgConf = "/run/secrets/wg.conf";
+    };
+
+    qbittorrent = {
+      enable = true;
+      vpn.enable = true;
+    };
+
+    bazarr.enable = true;
+    lidarr.enable = true;
+    prowlarr.enable = true;
+    radarr.enable = true;
+    sonarr.enable = true;
   };
 
   nixpkgs.config.allowUnfree = true;

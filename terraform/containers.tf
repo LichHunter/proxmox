@@ -192,12 +192,12 @@ resource "random_password" "authentik_password" {
   special          = true
 }
 
-resource "proxmox_virtual_environment_container" "nix_arr_container" {
+resource "proxmox_virtual_environment_container" "nixarr_container" {
   description = "Managed by Terraform"
 
   node_name    = var.node_name
   vm_id        = 203
-  tags         = ["terraform_created", "nixos", "nix-arr"]
+  tags         = ["terraform_created", "nixos", "nixarr"]
   unprivileged = true
 
   disk {
@@ -213,8 +213,14 @@ resource "proxmox_virtual_environment_container" "nix_arr_container" {
     nesting = true
   }
 
+  mount_point {
+    volume = "media"
+    size   = "800G"
+    path   = "/media"
+  }
+
   initialization {
-    hostname = "nix-arr"
+    hostname = "nixarr"
 
     ip_config {
       ipv4 {
@@ -230,10 +236,10 @@ resource "proxmox_virtual_environment_container" "nix_arr_container" {
 
     user_account {
       keys = [
-        trimspace(tls_private_key.nix_arr_key.public_key_openssh),
+        trimspace(tls_private_key.nixarr_key.public_key_openssh),
         var.admin_public_key,
       ]
-      password = random_password.nix_arr_password.result
+      password = random_password.nixarr_password.result
     }
   }
 
@@ -248,11 +254,11 @@ resource "proxmox_virtual_environment_container" "nix_arr_container" {
   }
 }
 
-resource "tls_private_key" "nix_arr_key" {
+resource "tls_private_key" "nixarr_key" {
   algorithm = "ED25519"
 }
 
-resource "random_password" "nix_arr_password" {
+resource "random_password" "nixarr_password" {
   length           = 16
   override_special = "_%@"
   special          = true

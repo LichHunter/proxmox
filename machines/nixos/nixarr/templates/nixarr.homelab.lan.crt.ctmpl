@@ -1,0 +1,4 @@
+{{- with secret "intermediate_ca/issue/issue-homelab-certs" "common_name=nixarr.homelab.lan" "ttl=24h" -}}
+{{ .Data.certificate }}
+{{ .Data.issuing_ca }}
+{{- end -}}

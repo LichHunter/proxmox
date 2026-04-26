@@ -40,16 +40,16 @@ output "authentik_password" {
   sensitive = true
 }
 
-output "nix_arr_private_key" {
-  value     = tls_private_key.nix_arr_key.private_key_pem
+output "nixarr_private_key" {
+  value     = tls_private_key.nixarr_key.private_key_pem
   sensitive = true
 }
 
-output "nix_arr_public_key" {
-  value = tls_private_key.nix_arr_key.public_key_openssh
+output "nixarr_public_key" {
+  value = tls_private_key.nixarr_key.public_key_openssh
 }
 
-output "nix_arr_password" {
-  value     = random_password.nix_arr_password.result
+output "nixarr_password" {
+  value     = random_password.nixarr_password.result
   sensitive = true
 }
