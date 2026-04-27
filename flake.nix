@@ -5,7 +5,7 @@
     git-hooks.url = "github:cachix/git-hooks.nix";
     deploy-rs.url = "github:serokell/deploy-rs";
     sops-nix.url = "github:Mic92/sops-nix";
-    nixarr.url = "github:LichHunter/nixarr";
+    nixarr.url = "git+ssh://gitea@gitea.susano-homelab.duckdns.org/fujin/nixarr.git";
     copyparty.url = "github:9001/copyparty";
   };
 

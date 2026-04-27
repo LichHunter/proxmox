@@ -13,6 +13,7 @@
     inputs.copyparty.nixosModules.default
 
     ../modules/network.nix
+    ../modules/unpackerr.nix
   ];
 
   proxmoxLXC = {
@@ -20,6 +21,9 @@
     manageNetwork = false;
     manageHostName = false;
   };
+
+  users.users.syncthing.extraGroups = [ "media" ];
+  users.users.copyparty.extraGroups = [ "media" ];
 
   services.openssh = {
     enable = true;
@@ -57,6 +61,13 @@
       group = "copyparty";
       mode = "0400";
     };
+    secrets."syncthing/admin/password" = {
+      path = "/run/secrets/syncthing/admin_password";
+      owner = "syncthing";
+      group = "syncthing";
+      mode = "0400";
+    };
+
   };
 
   nixarr = {
@@ -72,6 +83,13 @@
     qbittorrent = {
       enable = true;
       vpn.enable = true;
+      extraSettings = {
+        Preferences.WebUI = {
+          Password_PBKDF2 = "@ByteArray(bml4YXJyLXFiaXQtc2FsdA==:tG2AJNCoNkv+KYTD1jSWFu6XtdJrPDbkQ4eXqvnjSASbmmGJwqJVOyqWjWuHqAluurKkN/x816SKnXYA09ECeQ==)";
+          HostHeaderValidation = false;
+          CSRFProtection = false;
+        };
+      };
     };
 
     bazarr.enable = true;
@@ -92,9 +110,84 @@
     wants = [ "sops-nix.service" ];
   };
 
-  networking.firewall.allowedTCPPorts = [ 3923 ];
+  networking.firewall = {
+    allowedTCPPorts = [
+      3923 # copyparty
+      8384 # syncthing web ui
+      22000 # syncthing transfer
+    ];
+    allowedUDPPorts = [
+      21027 # syncthing discovery
+      22000 # syncthing quic
+    ];
+  };
 
   services = {
+    unpackerr = {
+      enable = true;
+      group = "media";
+      extractDir = "/media/data/unpackerr";
+      autoApiKeys = {
+        lidarr = "/media/data/.state/nixarr/lidarr/config.xml";
+      };
+      settings = {
+        debug = false;
+        webserver = {
+          metrics = true;
+          listen_addr = "0.0.0.0:5656";
+        };
+        interval = "2m";
+        start_delay = "1m";
+        retry_delay = "5m";
+        max_retries = 3;
+        parallel = 1;
+        lidarr = [
+          {
+            url = "http://localhost:8686";
+            paths = [ "/media/data/torrents" ];
+            protocols = "torrent,TorrentDownloadProtocol";
+            timeout = "10s";
+            delete_delay = "5m";
+            delete_orig = false;
+            split_flac = true;
+          }
+        ];
+        folder = [
+          {
+            path = "/media/data/torrents";
+            extract_path = "/media/data/unpackerr";
+            delete_after = "10m";
+            delete_files = false;
+            delete_original = false;
+            move_back = false;
+          }
+        ];
+      };
+    };
+
+    syncthing = {
+      enable = true;
+      openDefaultPorts = true;
+      guiAddress = "0.0.0.0:8384";
+      dataDir = "/var/lib/syncthing";
+      guiPasswordFile = "/run/secrets/syncthing/admin_password";
+      settings = {
+        gui.user = "admin";
+        devices = {
+          "phone" = {
+            id = "SDY4SXN-GIRMN6O-2JP3KMP-X62J4AZ-BJVU44Z-NGZQZZS-XX32HWS-FHLH6AZ";
+          };
+        };
+        folders = {
+          "music" = {
+            path = "/media/data/library/music";
+            label = "Lidarr Music";
+            devices = [ "phone" ];
+          };
+        };
+      };
+    };
+
     copyparty = {
       enable = true;
       user = "copyparty";
