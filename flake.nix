@@ -6,10 +6,11 @@
     deploy-rs.url = "github:serokell/deploy-rs";
     sops-nix.url = "github:Mic92/sops-nix";
     nixarr.url = "github:LichHunter/nixarr";
+    copyparty.url = "github:9001/copyparty";
   };
 
   outputs =
-    inputs@{
+    {
       self,
       nixpkgs,
       flake-parts,
@@ -17,12 +18,12 @@
       deploy-rs,
       sops-nix,
       nixarr,
-    }:
+      ...
+    }@inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
@@ -59,6 +60,8 @@
           };
         in
         {
+          formatter = pkgs.nixfmt-tree;
+
           checks = {
             inherit pre-commit-check;
           };
