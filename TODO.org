@@ -1,0 +1,13 @@
+#+title: Todo
+
+- [X] Create Private TLS certs with Vault
+  We should create a role in ansible that will create a certbot cron job that will go to Vault once in a while and get new cert for the machine
+- [X] Migrate to opentofu?
+- [X] Determine how can we push changes to Vault using terrafrm as it is currently behind firewall
+  Perhaps we can allow trafic to 8200 from local network, for that we will need to remove? rule that blocks it.
+  Solution was to use src_bash[:exports code]{HTTPS_PROXY="socks5h://127.0.0.1:9090";} with ssh proxy using command src_bash[:exports code]{ssh -D 9090 developer@jumpbox -N}
+- [X] Add monitoring using Grafana
+- [X] Create internal gitlab runner
+  Use it to build and check that all infrastructure is latest state
+- [ ] Remove init_data file after vault was initiated and we got keys locally
+- [ ] Create homelab Unbound dns instead that will be used instead of pyhole

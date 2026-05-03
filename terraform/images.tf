@@ -19,25 +19,12 @@ resource "proxmox_download_file" "debian_13_lxc_img" {
   upload_timeout     = 300
 }
 
-resource "proxmox_download_file" "opnsense_26_iso" {
-  content_type            = "iso"
-  datastore_id            = var.imagestore_id
-  node_name               = var.node_name
-  file_name               = "OPNsense-26.1.6-vga-amd64.iso"
-  url                     = "https://pkg.opnsense.org/releases/26.1.6/OPNsense-26.1.6-dvd-amd64.iso.bz2"
-  checksum                = "9054d9c0c18b3c1a1fd29f4cacef2c522a91f2e5f803c64b9b738000ee0eab2f2e194f8daa9a2d30c73af6ef8557739b443b2f1dea5d0651469aae54979d0757"
-  checksum_algorithm      = "sha512"
-  decompression_algorithm = "bz2"
-  upload_timeout          = 300
-  overwrite               = false
-}
+# resource "proxmox_virtual_environment_file" "nixos_img" {
+#   content_type = "vztmpl"
+#   datastore_id = var.imagestore_id
+#   node_name    = var.node_name
 
-resource "proxmox_virtual_environment_file" "nixos_img" {
-  content_type = "vztmpl"
-  datastore_id = var.imagestore_id
-  node_name    = var.node_name
-
-  source_file {
-    path = "../result/tarball/nixos-image-lxc-proxmox-26.05.20260423.731cada-x86_64-linux.tar.xz"
-  }
-}
+#   source_file {
+#     path = "../result/tarball/nixos-image-lxc-proxmox-26.05.20260423.731cada-x86_64-linux.tar.xz"
+#   }
+# }
