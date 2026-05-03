@@ -34,8 +34,8 @@ resource "proxmox_virtual_environment_container" "vault_container" {
     }
 
     dns {
-      domain  = "homelab.lan"
-      servers = ["192.168.100.1"]
+      domain  = var.dns_domain
+      servers = var.dns_servers
     }
 
     user_account {
@@ -100,8 +100,8 @@ resource "proxmox_virtual_environment_container" "root_ca_container" {
     }
 
     dns {
-      domain  = "homelab.lan"
-      servers = ["192.168.100.1"]
+      domain  = var.dns_domain
+      servers = var.dns_servers
     }
 
     user_account {
@@ -170,8 +170,8 @@ resource "proxmox_virtual_environment_container" "authentik_container" {
     }
 
     dns {
-      domain  = "homelab.lan"
-      servers = ["192.168.100.1"]
+      domain  = var.dns_domain
+      servers = var.dns_servers
     }
 
     user_account {
@@ -204,79 +204,73 @@ resource "random_password" "authentik_password" {
   special          = true
 }
 
-# resource "proxmox_virtual_environment_container" "nixarr_container" {
-#   description = "Managed by Terraform"
+resource "proxmox_virtual_environment_container" "gitea_container" {
+  description = "Managed by Terraform"
 
-#   node_name    = var.node_name
-#   vm_id        = 203
-#   tags         = ["terraform_created", "nixos", "nixarr"]
-#   unprivileged = true
+  node_name     = var.node_name
+  vm_id         = 203
+  tags          = ["terraform_created", "nixos", "gitea"]
+  unprivileged  = true
+  start_on_boot = true
 
-#   disk {
-#     datastore_id = var.datastore_id
-#     size         = 50
-#   }
+  disk {
+    datastore_id = var.datastore_id
+    size         = 20
+  }
 
-#   # TODO requires the machine to be recreated for some reason
-#   # cpu {
-#   #   cores = 4
-#   # }
+  memory {
+    dedicated = 2048
+  }
 
-#   memory {
-#     dedicated = 4096 # should be updated to 8192
-#   }
+  features {
+    nesting = true
+  }
 
-#   features {
-#     nesting = true
-#   }
+  initialization {
+    hostname = "gitea"
 
-#   mount_point {
-#     volume = "media"
-#     size   = "800G"
-#     path   = "/media"
-#   }
+    ip_config {
+      ipv4 {
+        address = "192.168.100.53/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::53/64"
+        gateway = "fd00:100::1"
+      }
+    }
 
-#   initialization {
-#     hostname = "nixarr"
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
 
-#     ip_config {
-#       ipv4 {
-#         address = "192.168.1.54/24"
-#         gateway = "192.168.1.1"
-#       }
-#     }
+    user_account {
+      keys = [
+        trimspace(tls_private_key.gitea_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.gitea_password.result
+    }
+  }
 
-#     dns {
-#       domain  = "homelab.lan"
-#       servers = ["192.168.1.2"]
-#     }
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
 
-#     user_account {
-#       keys = [
-#         trimspace(tls_private_key.nixarr_key.public_key_openssh),
-#         var.admin_public_key,
-#       ]
-#       password = random_password.nixarr_password.result
-#     }
-#   }
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img.id
+    type             = "nixos"
+  }
+}
 
-#   network_interface {
-#     name   = "eth0"
-#     bridge = "vmbr0"
-#   }
+resource "tls_private_key" "gitea_key" {
+  algorithm = "ED25519"
+}
 
-#   operating_system {
-#     template_file_id = proxmox_virtual_environment_file.nixos_img.id
-#     type             = "nixos"
-#   }
-# }
-
-# resource "tls_private_key" "nixarr_key" {
-#   algorithm = "ED25519"
-# }
-
-# resource "random_password" "nixarr_password" {
-#   length           = 16
-#   override_special = "_%@"
-#   special          = true
-# }
+resource "random_password" "gitea_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}

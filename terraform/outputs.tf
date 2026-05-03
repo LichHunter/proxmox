@@ -40,16 +40,16 @@ output "authentik_password" {
   sensitive = true
 }
 
-# output "nixarr_private_key" {
-#   value     = tls_private_key.nixarr_key.private_key_pem
-#   sensitive = true
-# }
+output "gitea_private_key" {
+  value     = tls_private_key.gitea_key.private_key_openssh
+  sensitive = true
+}
 
-# output "nixarr_public_key" {
-#   value = tls_private_key.nixarr_key.public_key_openssh
-# }
+output "gitea_public_key" {
+  value = tls_private_key.gitea_key.public_key_openssh
+}
 
-# output "nixarr_password" {
-#   value     = random_password.nixarr_password.result
-#   sensitive = true
-# }
+output "gitea_password" {
+  value     = random_password.gitea_password.result
+  sensitive = true
+}

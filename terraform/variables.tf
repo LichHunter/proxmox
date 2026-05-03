@@ -32,3 +32,15 @@ variable "admin_public_key" {
   description = "Admin SSH public key added to managed containers"
   type        = string
 }
+
+variable "dns_domain" {
+  description = "DNS search domain for containers"
+  type        = string
+  default     = "homelab.lan"
+}
+
+variable "dns_servers" {
+  description = "DNS servers for containers"
+  type        = list(string)
+  default     = ["192.168.100.1"]
+}

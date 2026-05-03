@@ -25,3 +25,11 @@ resource "vault_approle_auth_backend_role" "nixarr" {
   token_max_ttl  = 86400
   token_policies = [vault_policy.issue_homelab_certs.name]
 }
+
+resource "vault_approle_auth_backend_role" "gitea" {
+  backend        = vault_auth_backend.approle.path
+  role_name      = "gitea"
+  token_ttl      = 3600
+  token_max_ttl  = 86400
+  token_policies = [vault_policy.issue_homelab_certs.name]
+}

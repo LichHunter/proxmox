@@ -87,6 +87,7 @@
               pre-commit
               gitleaks
               tflint
+              nixd
 
               opencode
             ];
@@ -100,6 +101,27 @@
           system = "x86_64-linux";
           specialArgs = { inherit inputs; };
           modules = [ ./machines/nixos/nixarr ];
+        };
+
+        nixosConfigurations.gitea = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [ ./machines/nixos/gitea ];
+        };
+
+        deploy.nodes.gitea = {
+          hostname = "192.168.100.53";
+          profiles.system = {
+            user = "root";
+            sshUser = "root";
+            sshOpts = [
+              "-o"
+              "StrictHostKeyChecking=no"
+              "-i"
+              ".secrets/gitea_key"
+            ];
+            path = deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations.gitea;
+          };
         };
 
         deploy.nodes.nixarr = {
