@@ -29,6 +29,26 @@ The flake uses =flake-parts= for clean separation of per-system and non-per-syst
 | =nixosConfigurations=   | NixOS machine configs                    |
 | =deploy.nodes=          | deploy-rs deployment targets             |
 
+* First setup
+This section will cover how to setup the proxmox machine after you have just installed the Proxmox
+1. Setup ssh using key instead of password
+  #+begin_src bash
+ssh-copy-id user@ip_address
+  #+end_src 
+
+  For beelink you will use
+  #+begin_src bash
+ssh-copy-id beelink
+  #+end_src 
+2. Configure the proxmox using ansible playbook
+  #+begin_src bash
+ansible-playbook playbooks/proxmox.yml -l beelink
+  #+end_src 
+
+  This way it will:
+   - remove the enterprise repositories
+   - setup the zsh
+   - setup the terraform role
 * Directory Structure
 #+begin_example
 .
