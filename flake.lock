@@ -158,11 +158,11 @@
         "rev": "4aff331d404c0e973962bcec751fd5f27acd3ec8",
         "revCount": 393,
         "type": "git",
-        "url": "ssh://gitea@gitea.susano-homelab.duckdns.org/fujin/nixarr.git"
+        "url": "ssh://git@gitea.susano-homelab.duckdns.org/fujin/nixarr.git"
       },
       "original": {
         "type": "git",
-        "url": "ssh://gitea@gitea.susano-homelab.duckdns.org/fujin/nixarr.git"
+        "url": "ssh://git@gitea.susano-homelab.duckdns.org/fujin/nixarr.git"
       }
     },
     "nixpkgs": {

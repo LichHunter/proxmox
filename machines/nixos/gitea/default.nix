@@ -104,6 +104,42 @@
     wants = [ "sops-nix.service" ];
   };
 
+  # Create API token for Homepage dashboard
+  systemd.services.gitea-homepage-token = {
+    description = "Create Gitea API token for Homepage dashboard";
+    after = [ "gitea.service" ];
+    requires = [ "gitea.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      User = "gitea";
+      RemainAfterExit = true;
+      WorkingDirectory = "/var/lib/gitea";
+    };
+
+    environment.GITEA_WORK_DIR = "/var/lib/gitea";
+
+    script = ''
+      TOKEN_FILE="/var/lib/gitea/homepage-token"
+
+      if [ ! -f "$TOKEN_FILE" ]; then
+        echo "Creating Gitea API token for Homepage..."
+
+        ${pkgs.gitea}/bin/gitea admin user generate-access-token \
+          --username fujin \
+          --token-name homepage-dashboard \
+          --scopes "read:repository,read:user,read:organization,read:issue,read:notification" \
+          > "$TOKEN_FILE"
+
+        chmod 600 "$TOKEN_FILE"
+        echo "Token created and saved to $TOKEN_FILE"
+      else
+        echo "Token already exists at $TOKEN_FILE"
+      fi
+    '';
+  };
+
   networking.firewall = {
     allowedTCPPorts = [
       3000 # Gitea HTTP

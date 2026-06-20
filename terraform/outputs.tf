@@ -53,3 +53,26 @@ output "gitea_password" {
   value     = random_password.gitea_password.result
   sensitive = true
 }
+
+output "homepage_private_key" {
+  value     = tls_private_key.homepage_key.private_key_openssh
+  sensitive = true
+}
+
+output "homepage_public_key" {
+  value = tls_private_key.homepage_key.public_key_openssh
+}
+
+output "homepage_password" {
+  value     = random_password.homepage_password.result
+  sensitive = true
+}
+
+output "homepage_proxmox_token_id" {
+  value = proxmox_user_token.homepage.id
+}
+
+output "homepage_proxmox_token_secret" {
+  value     = split("=", proxmox_user_token.homepage.value)[1]
+  sensitive = true
+}

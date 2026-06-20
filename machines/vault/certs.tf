@@ -24,7 +24,7 @@ resource "vault_pki_secret_backend_config_acme" "intermediate" {
   allowed_roles            = [vault_pki_secret_backend_role.intermediate_role.name]
   allow_role_ext_key_usage = false
   default_directory_policy = "role:${vault_pki_secret_backend_role.intermediate_role.name}"
-  dns_resolver             = "192.168.1.2:53"
+  dns_resolver             = "192.168.100.1:53"
   eab_policy               = "not-required"
 }
 

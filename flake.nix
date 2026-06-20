@@ -5,7 +5,7 @@
     git-hooks.url = "github:cachix/git-hooks.nix";
     deploy-rs.url = "github:serokell/deploy-rs";
     sops-nix.url = "github:Mic92/sops-nix";
-    nixarr.url = "git+ssh://gitea@gitea.susano-homelab.duckdns.org/fujin/nixarr.git";
+    nixarr.url = "git+ssh://git@gitea.susano-homelab.duckdns.org/fujin/nixarr.git";
     copyparty.url = "github:9001/copyparty";
   };
 
@@ -109,6 +109,12 @@
           modules = [ ./machines/nixos/gitea ];
         };
 
+        nixosConfigurations.homepage = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs; };
+          modules = [ ./machines/nixos/homepage ];
+        };
+
         deploy.nodes.gitea = {
           hostname = "192.168.100.53";
           profiles.system = {
@@ -136,6 +142,21 @@
               ".secrets/nixarr_key"
             ];
             path = deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations.nixos;
+          };
+        };
+
+        deploy.nodes.homepage = {
+          hostname = "192.168.100.12";
+          profiles.system = {
+            user = "root";
+            sshUser = "root";
+            sshOpts = [
+              "-o"
+              "StrictHostKeyChecking=no"
+              "-i"
+              ".secrets/homepage_key"
+            ];
+            path = deploy-rs.lib.x86_64-linux.activate.nixos self.nixosConfigurations.homepage;
           };
         };
       };

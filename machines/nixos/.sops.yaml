@@ -3,6 +3,7 @@ keys:
   - &admin age19wvqtn4ju6k4vs8fxr34unl6xx4cv04jw0lx9ps20xlde927zfssgl4qke
   - &nixarr age12xf2kpcjjjuuh03gu5s2u3jf7e7654efz7uxv537mnyt2hs8f9hq6fucje
   - &gitea age153twpqdy3n44j5qtpvuh0t979za9pzgm2fzn0z8msds3zm8qaqrs546wjj
+  - &homepage age1e4whffh0zjmpvjrc8eut40urs0lex7klgahjyarnquckwdtnvpyqvgmkkg
 
 creation_rules:
   - path_regex: secrets/nixarr\.yaml$
@@ -15,3 +16,8 @@ creation_rules:
       - age:
           - *admin
           - *gitea
+  - path_regex: secrets/homepage\.yaml$
+    key_groups:
+      - age:
+          - *admin
+          - *homepage

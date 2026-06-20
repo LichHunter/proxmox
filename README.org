@@ -17,7 +17,8 @@ Homelab infrastructure on Proxmox, managed with OpenTofu, Ansible, and NixOS.
 - Authentik (ID 202)
 
 *** NixOS-managed
-- nixarr (ID 203) — media server stack (qBittorrent, Sonarr, Radarr, Prowlarr, Bazarr, Lidarr)
+- Gitea (ID 203) — Git hosting
+- Homepage (ID 204) — Dashboard with service status and widgets
 
 ** Nix Flake Structure
 The flake uses =flake-parts= for clean separation of per-system and non-per-system outputs.
@@ -213,6 +214,72 @@ For simple, integrated DNS and DHCP, Dnsmasq is the correct tool.
     - Go back to the =General= tab.
     - Scroll down and set the =DHCP default domain= to your desired internal domain (e.g., =lab.lan=).
 6.  *Apply Changes:* Click the =Apply= button. Your protected LAN now has fully functional DHCP and automatically registered DNS for its clients.
+
+* Homepage Dashboard Setup
+
+Homepage provides a dashboard with service status widgets for Proxmox, Gitea, Vault, and Authentik.
+
+** Infrastructure (Terraform)
+#+begin_src bash
+cd terraform && tofu apply
+#+end_src
+
+This creates:
+- LXC container (ID 204, IP 192.168.100.12)
+- Proxmox API user =homepage@pve= with =PVEAuditor= role
+- API token =homepage@pve!dashboard=
+
+** Vault AppRole (machines/vault)
+#+begin_src bash
+cd machines/vault && tofu apply
+#+end_src
+
+Creates the =homepage= approle for certificate issuance.
+
+** Extract SSH Key and Update Sops
+#+begin_src bash
+cd terraform
+tofu output -raw homepage_private_key > ../.secrets/homepage_key && chmod 600 ../.secrets/homepage_key
+
+# Update sops age key from container's SSH host key
+./scripts/sops-helper.sh update-keys homepage 192.168.100.12
+#+end_src
+
+** Configure Secrets
+#+begin_src bash
+# Proxmox token (from terraform)
+./scripts/sops-helper.sh set homepage proxmox_token_id "$(cd terraform && tofu output -raw homepage_proxmox_token_id)"
+./scripts/sops-helper.sh set homepage proxmox_token_secret "$(cd terraform && tofu output -raw homepage_proxmox_token_secret)"
+
+# Vault approle (from machines/vault)
+./scripts/sops-helper.sh set homepage homepage_role_id "$(cd machines/vault && tofu output -raw homepage_role_id)"
+./scripts/sops-helper.sh set homepage homepage_secret_id "$(cd machines/vault && tofu output -raw homepage_secret_id)"
+#+end_src
+
+** Deploy Gitea First (for API token)
+Gitea automatically generates an API token for Homepage on first deploy:
+#+begin_src bash
+deploy .#gitea --skip-checks
+
+# Get the generated token
+TOKEN=$(ssh root@192.168.100.53 cat /var/lib/gitea/homepage-token | grep -oP 'created: \K.*')
+./scripts/sops-helper.sh set homepage gitea_token "$TOKEN"
+#+end_src
+
+** Deploy Homepage
+#+begin_src bash
+deploy .#homepage --skip-checks
+#+end_src
+
+Homepage will be available at =http://192.168.100.12:8082=
+
+** Service Widgets
+| Service   | Widget Type | Data Source                |
+|-----------+-------------+----------------------------|
+| Proxmox   | proxmox     | API token (PVEAuditor)     |
+| Vault     | customapi   | /v1/sys/health endpoint    |
+| Gitea     | gitea       | API token (read-only)      |
+| Authentik | ping        | ICMP ping                  |
 
 * Known Issues
 

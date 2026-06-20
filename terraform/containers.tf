@@ -274,3 +274,97 @@ resource "random_password" "gitea_password" {
   override_special = "_%@"
   special          = true
 }
+
+resource "proxmox_virtual_environment_container" "homepage_container" {
+  description = "Managed by Terraform"
+
+  node_name     = var.node_name
+  vm_id         = 204
+  tags          = ["terraform_created", "nixos", "homepage"]
+  unprivileged  = true
+  start_on_boot = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 8
+  }
+
+  memory {
+    dedicated = 512
+  }
+
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "homepage"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.12/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::12/64"
+        gateway = "fd00:100::1"
+      }
+    }
+
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.homepage_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.homepage_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img.id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "homepage_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "homepage_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
+###
+# Homepage Proxmox API User
+###
+resource "proxmox_virtual_environment_user" "homepage" {
+  comment = "Homepage Dashboard Monitoring - Managed by Terraform"
+  user_id = "homepage@pve"
+  enabled = true
+}
+
+resource "proxmox_acl" "homepage_readonly" {
+  user_id   = proxmox_virtual_environment_user.homepage.user_id
+  role_id   = "PVEAuditor"
+  path      = "/"
+  propagate = true
+}
+
+resource "proxmox_user_token" "homepage" {
+  comment               = "Homepage Dashboard Token"
+  token_name            = "dashboard"
+  user_id               = proxmox_virtual_environment_user.homepage.user_id
+  privileges_separation = false
+}
