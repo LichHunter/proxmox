@@ -32,7 +32,7 @@ template {
   destination = "{{ vault_agent_cert_folder }}/{{ cert.filename }}.crt"
   perms       = "{{ vault_agent_cert_perms }}"
   exec {
-    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    command = ["sudo", "/bin/bash", "-c", {{ vault_agent_reload_cmd | to_json }}]
     timeout = "30s"
   }
 }
@@ -42,7 +42,7 @@ template {
   destination = "{{ vault_agent_cert_folder }}/{{ cert.filename }}.key"
   perms       = "{{ vault_agent_key_perms }}"
   exec {
-    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    command = ["sudo", "/bin/bash", "-c", {{ vault_agent_reload_cmd | to_json }}]
     timeout = "30s"
   }
 }
@@ -55,7 +55,7 @@ template {
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.crt"
   perms       = "{{ vault_agent_cert_perms }}"
   exec {
-    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    command = ["sudo", "/bin/bash", "-c", {{ vault_agent_reload_cmd | to_json }}]
     timeout = "30s"
   }
 }
@@ -65,7 +65,7 @@ template {
   destination = "{{ vault_agent_cert_folder }}/{{ vault_agent_cert_filename | default(vault_agent_common_name) }}.key"
   perms       = "{{ vault_agent_key_perms }}"
   exec {
-    command = {{ vault_agent_sudo_reload_cmd.split() | to_json }}
+    command = ["sudo", "/bin/bash", "-c", {{ vault_agent_reload_cmd | to_json }}]
     timeout = "30s"
   }
 }

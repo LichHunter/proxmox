@@ -24,6 +24,36 @@ matrix_client_element_enabled: true
 
 matrix_synapse_enable_registration: false
 
+matrix_authentication_service_enabled: true
+matrix_authentication_service_config_secrets_encryption: "{{ lookup('file', playbook_dir ~ '/../.secrets/matrix_mas_encryption_secret') }}"
+matrix_authentication_service_hostname: "auth.homelab.lan"
+matrix_authentication_service_path_prefix: /
+matrix_authentication_service_container_extra_arguments:
+  - "--mount type=bind,src=/matrix/traefik/ca/ca-bundle.crt,dst=/etc/ssl/certs/ca-certificates.crt,ro"
+matrix_authentication_service_environment_variables_extension: |
+  SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+matrix_authentication_service_config_upstream_oauth2_providers:
+  - id: 01HFVBY12TMNTYTBV8W921M5FA
+    synapse_idp_id: null
+    issuer: "https://authentik.homelab.lan:9443/application/o/matrix/"
+    human_name: authentik
+    client_id: "{{ lookup('file', playbook_dir ~ '/../.secrets/matrix_oidc_client_id') }}"
+    client_secret: "{{ lookup('file', playbook_dir ~ '/../.secrets/matrix_oidc_client_secret') }}"
+    token_endpoint_auth_method: client_secret_post
+    scope: "openid email profile"
+    discovery_mode: oidc
+    claims_imports:
+      localpart:
+        action: force
+        template: "{% raw %}{{ user.preferred_username }}{% endraw %}"
+      displayname:
+        action: suggest
+        template: "{% raw %}{{ user.name }}{% endraw %}"
+      email:
+        action: suggest
+        template: "{% raw %}{{ user.email }}{% endraw %}"
+        set_email_verification: import
+
 matrix_user_creator_users_auto:
   - username: admin
     initial_password: "{{ lookup('password', playbook_dir ~ '/../.secrets/matrix_admin_password length=24 chars=ascii_letters,digits') }}"

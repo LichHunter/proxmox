@@ -48,14 +48,12 @@
         vault_agent_cert_ttl: "720h"
         vault_agent_reload_service: "authentik-server"
         vault_agent_reload_cmd: >-
-          /bin/bash -c '
-          docker exec authentik-worker-1 ak import_certificate
+          /usr/bin/docker exec authentik-worker-1 ak import_certificate
           --certificate /certs/authentik.homelab.lan.crt
           --private-key /certs/authentik.homelab.lan.key
           --name authentik.homelab.lan
-          && docker restart authentik-server-1
-          && docker restart authentik-worker-1
-          '
+          && /usr/bin/docker restart authentik-server-1
+          && /usr/bin/docker restart authentik-worker-1
         vault_agent_role_id: "{{ authentik_role_id_response.json.data.role_id }}"
         vault_agent_secret_id: "{{ authentik_secret_id_response.json.data.secret_id }}"
 

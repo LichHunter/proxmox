@@ -3,3 +3,8 @@ variable "token" {
   type        = string
   sensitive   = true
 }
+
+variable "authentik_ip" {
+  description = "Authentik server IP address"
+  type        = string
+}

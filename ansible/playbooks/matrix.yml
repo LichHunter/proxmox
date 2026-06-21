@@ -7,6 +7,13 @@
   roles:
     - docker
   tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        name:
+          - sudo
+        state: present
+        update_cache: true
+
     - name: Create Traefik CA directory
       ansible.builtin.file:
         path: /matrix/traefik/ca
@@ -27,6 +34,19 @@
           {{ intermediate_ca.content }}
         dest: /matrix/traefik/ca/ca-bundle.crt
         mode: "0644"
+
+    - name: Copy CA to system trust store
+      ansible.builtin.copy:
+        content: |
+          {{ lookup('file', playbook_dir ~ '/../../.secrets/root-ca.crt') }}
+          {{ intermediate_ca.content }}
+        dest: /usr/local/share/ca-certificates/homelab-ca.crt
+        mode: '0644'
+
+    - name: Update system CA certificates
+      command: update-ca-certificates
+      register: ca_update
+      changed_when: "'1 added' in ca_update.stdout or '0 added' not in ca_update.stdout"
 
     - name: Add host to matrix_servers group with all vars
       ansible.builtin.add_host:

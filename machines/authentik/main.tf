@@ -79,3 +79,12 @@ resource "authentik_brand" "external" {
   flow_authentication = authentik_flow.custom_authentication.uuid
   web_certificate     = data.authentik_certificate_key_pair.homelab.id
 }
+
+resource "authentik_brand" "ip_access" {
+  domain              = var.authentik_ip
+  branding_title      = "authentik"
+  branding_logo       = "/static/dist/assets/icons/icon_left_brand.svg"
+  branding_favicon    = "/static/dist/assets/icons/icon.png"
+  flow_authentication = authentik_flow.custom_local_authentication.uuid
+  web_certificate     = data.authentik_certificate_key_pair.homelab.id
+}

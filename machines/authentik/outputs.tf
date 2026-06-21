@@ -22,3 +22,17 @@ output "gitlab_secret" {
   value     = random_password.gitlab_secret.result
   sensitive = true
 }
+
+output "matrix_id" {
+  value     = random_password.matrix_id.result
+  sensitive = true
+}
+
+output "matrix_secret" {
+  value     = random_password.matrix_secret.result
+  sensitive = true
+}
+
+output "matrix_issuer" {
+  value = "https://authentik.homelab.lan:9443/application/o/matrix/"
+}

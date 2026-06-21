@@ -118,13 +118,16 @@ resource "authentik_flow" "custom_local_authentication" {
   designation = "authentication"
 }
 
-data "authentik_stage" "default_authentication_identification" {
-  name = "default-authentication-identification"
+resource "authentik_stage_identification" "custom_local_authentication" {
+  name              = "custom-local-identification-stage"
+  user_fields       = ["username", "email"]
+  sources           = []
+  passwordless_flow = authentik_flow.passkey_authentication.uuid
 }
 
 resource "authentik_flow_stage_binding" "custom_local_identification" {
   target = authentik_flow.custom_local_authentication.uuid
-  stage  = data.authentik_stage.default_authentication_identification.id
+  stage  = authentik_stage_identification.custom_local_authentication.id
   order  = 10
 }
 
