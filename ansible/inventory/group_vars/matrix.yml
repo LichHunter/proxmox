@@ -54,6 +54,10 @@ matrix_authentication_service_config_upstream_oauth2_providers:
         template: "{% raw %}{{ user.email }}{% endraw %}"
         set_email_verification: import
 
+matrix_mautrix_telegram_enabled: true
+matrix_mautrix_telegram_api_id: "{{ lookup('file', playbook_dir ~ '/../.secrets/matrix_telegram_api_id') }}"
+matrix_mautrix_telegram_api_hash: "{{ lookup('file', playbook_dir ~ '/../.secrets/matrix_telegram_api_hash') }}"
+
 matrix_user_creator_users_auto:
   - username: admin
     initial_password: "{{ lookup('password', playbook_dir ~ '/../.secrets/matrix_admin_password length=24 chars=ascii_letters,digits') }}"
