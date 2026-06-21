@@ -76,3 +76,17 @@ output "homepage_proxmox_token_secret" {
   value     = split("=", proxmox_user_token.homepage.value)[1]
   sensitive = true
 }
+
+output "matrix_private_key" {
+  value     = tls_private_key.matrix_key.private_key_openssh
+  sensitive = true
+}
+
+output "matrix_public_key" {
+  value = tls_private_key.matrix_key.public_key_openssh
+}
+
+output "matrix_password" {
+  value     = random_password.matrix_password.result
+  sensitive = true
+}

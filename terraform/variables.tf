@@ -4,10 +4,10 @@ variable "endpoint" {
   default     = "https://localhost:8006"
 }
 
-variable "node_name" {
-  description = "Proxmox node name"
-  type        = string
-  default     = "pve"
+variable "nodes" {
+  description = "List of Proxmox node names to manage"
+  type        = list(string)
+  default     = ["pve"]
 }
 
 variable "imagestore_id" {

@@ -26,10 +26,8 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
-      - containerd.io=1.7.28-1~debian.13~trixie
     state: present
     update_cache: true
-    allow_downgrade: true
 
 - name: Ensure docker group exists
   ansible.builtin.group:

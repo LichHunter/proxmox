@@ -1,3 +1,6 @@
-endpoint = "https://proxmox.susano-lab.duckdns.org"
-username = "terraform@pam"
-password = "password"
+endpoint         = "https://192.168.100.10:8006/"
+nodes            = ["pve", "beelink"]
+datastore_id     = "local-lvm"
+imagestore_id    = "local"
+api_token        = "your-api-token-here"
+admin_public_key = "ssh-ed25519 AAAA..."

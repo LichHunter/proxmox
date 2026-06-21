@@ -1,0 +1,54 @@
+---
+- name: "Matrix: Prepare host"
+  hosts: matrix
+  gather_facts: true
+  tags:
+    - always
+  roles:
+    - docker
+  tasks:
+    - name: Create Traefik CA directory
+      ansible.builtin.file:
+        path: /matrix/traefik/ca
+        state: directory
+        mode: "0755"
+
+    - name: Fetch intermediate CA from Vault
+      ansible.builtin.uri:
+        url: https://vault.homelab.lan:8200/v1/intermediate_ca/ca/pem
+        validate_certs: false
+        return_content: true
+      register: intermediate_ca
+
+    - name: Create combined CA bundle
+      ansible.builtin.copy:
+        content: |
+          {{ lookup('file', playbook_dir ~ '/../../.secrets/root-ca.crt') }}
+          {{ intermediate_ca.content }}
+        dest: /matrix/traefik/ca/ca-bundle.crt
+        mode: "0644"
+
+    - name: Add host to matrix_servers group with all vars
+      ansible.builtin.add_host:
+        name: "{{ inventory_hostname }}"
+        groups: matrix_servers
+        ansible_host: "{{ ansible_host }}"
+        ansible_user: "{{ ansible_user }}"
+        ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
+        ansible_ssh_common_args: "{{ ansible_ssh_common_args | default('-o StrictHostKeyChecking=no') }}"
+        matrix_playbook_migration_validated_version: "{{ matrix_playbook_migration_validated_version }}"
+        matrix_domain: "{{ matrix_domain }}"
+        matrix_homeserver_implementation: "{{ matrix_homeserver_implementation }}"
+        matrix_homeserver_generic_secret_key: "{{ matrix_homeserver_generic_secret_key }}"
+        postgres_connection_password: "{{ postgres_connection_password }}"
+        matrix_playbook_reverse_proxy_type: "{{ matrix_playbook_reverse_proxy_type }}"
+        devture_systemd_docker_base_ipv6_enabled: "{{ devture_systemd_docker_base_ipv6_enabled }}"
+        matrix_ketesa_enabled: "{{ matrix_ketesa_enabled }}"
+        matrix_client_element_enabled: "{{ matrix_client_element_enabled }}"
+        matrix_user_creator_users_auto: "{{ matrix_user_creator_users_auto }}"
+        traefik_config_certificatesResolvers_acme_caServer: "{{ traefik_config_certificatesResolvers_acme_caServer }}"
+        traefik_container_additional_volumes_custom: "{{ traefik_container_additional_volumes_custom }}"
+        traefik_environment_variables: "{{ traefik_environment_variables }}"
+
+- name: "Matrix: Deploy via matrix-docker-ansible-deploy"
+  import_playbook: ../matrix-docker-ansible-deploy/setup.yml

@@ -471,9 +471,15 @@
             - "'path is already in use' not in (enable_pki_result.stderr | default(''))"
           changed_when: enable_pki_result.rc == 0
 
-        - name: Tune intermediate CA max TTL
+        - name: Tune intermediate CA max TTL and ACME headers
           ansible.builtin.command:
-            cmd: vault secrets tune -max-lease-ttl=157680000s intermediate_ca
+            cmd: >-
+              vault secrets tune
+              -max-lease-ttl=157680000s
+              -allowed-response-headers=Link
+              -allowed-response-headers=Location
+              -allowed-response-headers=Replay-Nonce
+              intermediate_ca
 
         - name: Build PEM bundle (intermediate cert + key + root cert)
           ansible.builtin.set_fact:

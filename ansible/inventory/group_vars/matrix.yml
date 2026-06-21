@@ -1,0 +1,30 @@
+---
+matrix_playbook_migration_validated_version: v2026.05.18.0
+
+matrix_domain: "homelab.lan"
+matrix_homeserver_implementation: synapse
+
+matrix_homeserver_generic_secret_key: "{{ lookup('password', playbook_dir ~ '/../.secrets/matrix_homeserver_secret length=64 chars=ascii_letters,digits') }}"
+postgres_connection_password: "{{ lookup('password', playbook_dir ~ '/../.secrets/matrix_postgres_password length=32 chars=ascii_letters,digits') }}"
+
+matrix_playbook_reverse_proxy_type: playbook-managed-traefik
+devture_systemd_docker_base_ipv6_enabled: true
+
+traefik_config_certificatesResolvers_acme_caServer: "https://vault.homelab.lan:8200/v1/intermediate_ca/acme/directory"
+traefik_container_additional_volumes_custom:
+  - type: bind
+    src: /matrix/traefik/ca/ca-bundle.crt
+    dst: /ca/ca-bundle.crt
+    options: ro
+traefik_environment_variables: |
+  LEGO_CA_CERTIFICATES=/ca/ca-bundle.crt
+
+matrix_ketesa_enabled: true
+matrix_client_element_enabled: true
+
+matrix_synapse_enable_registration: false
+
+matrix_user_creator_users_auto:
+  - username: admin
+    initial_password: "{{ lookup('password', playbook_dir ~ '/../.secrets/matrix_admin_password length=24 chars=ascii_letters,digits') }}"
+    initial_type: admin
