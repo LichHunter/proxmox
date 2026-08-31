@@ -90,3 +90,17 @@ output "matrix_password" {
   value     = random_password.matrix_password.result
   sensitive = true
 }
+
+output "karate_private_key" {
+  value     = tls_private_key.karate_key.private_key_openssh
+  sensitive = true
+}
+
+output "karate_public_key" {
+  value = tls_private_key.karate_key.public_key_openssh
+}
+
+output "karate_password" {
+  value     = random_password.karate_password.result
+  sensitive = true
+}

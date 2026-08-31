@@ -19,6 +19,9 @@ Homelab infrastructure on Proxmox, managed with OpenTofu, Ansible, and NixOS.
 *** NixOS-managed
 - Gitea (ID 203) — Git hosting
 - Homepage (ID 204) — Dashboard with service status and widgets
+- Karate (ID 400, pve) — Karate Tournament stack (Zitadel v4 + Spring Boot
+  backend + Angular frontend). Machine configuration lives in
+  =~/Code/karate/nixos-apps=, deployed with deploy-rs from that repo.
 
 ** Nix Flake Structure
 The flake uses =flake-parts= for clean separation of per-system and non-per-system outputs.

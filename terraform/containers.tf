@@ -448,3 +448,80 @@ resource "random_password" "matrix_password" {
   override_special = "_%@"
   special          = true
 }
+
+###############################################################################
+# Karate Tournament (NixOS LXC, configured from ~/Code/karate/nixos-apps)
+###############################################################################
+
+resource "proxmox_virtual_environment_container" "karate_container" {
+  description = "Karate Tournament stack: Zitadel + backend + frontend - Managed by Terraform"
+
+  node_name     = "pve"
+  vm_id         = 400
+  tags          = ["terraform_created", "nixos", "karate"]
+  unprivileged  = true
+  start_on_boot = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 20
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  # Only `nesting` may be set via API tokens (PVE restricts other feature
+  # flags to root@pam). Same setup as authentik (docker-in-LXC) — works.
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "karate"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.54/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::54/64"
+        gateway = "fd00:100::1"
+      }
+    }
+
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.karate_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.karate_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img["pve"].id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "karate_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "karate_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
