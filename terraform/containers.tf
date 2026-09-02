@@ -467,8 +467,12 @@ resource "proxmox_virtual_environment_container" "karate_container" {
     size         = 20
   }
 
+  cpu {
+    cores = 4
+  }
+
   memory {
-    dedicated = 2048
+    dedicated = 8192
   }
 
   # Only `nesting` may be set via API tokens (PVE restricts other feature
@@ -521,6 +525,85 @@ resource "tls_private_key" "karate_key" {
 }
 
 resource "random_password" "karate_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
+###############################################################################
+# Karate Zitadel (NixOS LXC, configured from ~/Code/karate/app)
+###############################################################################
+
+resource "proxmox_virtual_environment_container" "karate_zitadel_container" {
+  description = "Karate Zitadel (identity): zitadel v4 + postgres - Managed by Terraform"
+
+  node_name     = "pve"
+  vm_id         = 401
+  tags          = ["terraform_created", "nixos", "karate", "zitadel"]
+  unprivileged  = true
+  start_on_boot = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 15
+  }
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 2048
+  }
+
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "karate-zitadel"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.55/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::55/64"
+        gateway = "fd00:100::1"
+      }
+    }
+
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.karate_zitadel_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.karate_zitadel_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img["pve"].id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "karate_zitadel_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "karate_zitadel_password" {
   length           = 16
   override_special = "_%@"
   special          = true
