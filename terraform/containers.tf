@@ -552,8 +552,9 @@ resource "proxmox_virtual_environment_container" "karate_zitadel_container" {
     cores = 4
   }
 
+  # Zitadel + Postgres + login app spike together; 2GB OOM-killed the CT.
   memory {
-    dedicated = 2048
+    dedicated = 4096
   }
 
   features {
