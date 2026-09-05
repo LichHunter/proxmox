@@ -8,4 +8,7 @@ tmp/
 
 .secrets/
 
+# OPNsense API credentials (plaintext - never commit)
+machines/opnsense/terraform.tfvars
+
 result

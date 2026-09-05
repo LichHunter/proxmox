@@ -1,0 +1,3 @@
+opnsense_uri        = "https://192.168.100.1"
+opnsense_api_key    = "REPLACE_WITH_API_KEY"
+opnsense_api_secret = "REPLACE_WITH_API_SECRET"
