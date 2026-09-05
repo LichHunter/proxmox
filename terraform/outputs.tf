@@ -118,3 +118,23 @@ output "karate_zitadel_password" {
   value     = random_password.karate_zitadel_password.result
   sensitive = true
 }
+
+output "karate_staging_zitadel_private_key" {
+  value     = tls_private_key.karate_staging_zitadel_key.private_key_openssh
+  sensitive = true
+}
+
+output "karate_staging_private_key" {
+  value     = tls_private_key.karate_staging_key.private_key_openssh
+  sensitive = true
+}
+
+output "karate_staging_zitadel_password" {
+  value     = random_password.karate_staging_zitadel_password.result
+  sensitive = true
+}
+
+output "karate_staging_password" {
+  value     = random_password.karate_staging_password.result
+  sensitive = true
+}

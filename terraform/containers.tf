@@ -612,3 +612,164 @@ resource "random_password" "karate_zitadel_password" {
   override_special = "_%@"
   special          = true
 }
+
+###############################################################################
+# Karate Staging Zitadel (NixOS LXC, configured from ~/Code/karate/app)
+###############################################################################
+
+resource "proxmox_virtual_environment_container" "karate_staging_zitadel_container" {
+  description = "Karate STAGING identity: zitadel + postgres - Managed by Terraform"
+
+  node_name     = "pve"
+  vm_id         = 402
+  tags          = ["terraform_created", "nixos", "karate", "staging", "zitadel"]
+  unprivileged  = true
+  start_on_boot = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 15
+  }
+
+  cpu {
+    cores = 2
+  }
+
+  # Staging sizing: the login-container 1G memory cap (deployed from the app
+  # repo) plus swap keeps the leak scenario contained at this smaller size.
+  memory {
+    dedicated = 2048
+    swap      = 2048
+  }
+
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "karate-staging-zitadel"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.56/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::56/64"
+        gateway = "fd00:100::1"
+      }
+    }
+
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.karate_staging_zitadel_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.karate_staging_zitadel_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img["pve"].id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "karate_staging_zitadel_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "karate_staging_zitadel_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}
+
+###############################################################################
+# Karate Staging app (NixOS LXC, configured from ~/Code/karate/app)
+###############################################################################
+
+resource "proxmox_virtual_environment_container" "karate_staging_container" {
+  description = "Karate STAGING app: frontend + backend + postgres - Managed by Terraform"
+
+  node_name     = "pve"
+  vm_id         = 403
+  tags          = ["terraform_created", "nixos", "karate", "staging"]
+  unprivileged  = true
+  start_on_boot = true
+
+  disk {
+    datastore_id = var.datastore_id
+    size         = 20
+  }
+
+  cpu {
+    cores = 2
+  }
+
+  memory {
+    dedicated = 4096
+  }
+
+  features {
+    nesting = true
+  }
+
+  initialization {
+    hostname = "karate-staging"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.100.57/24"
+        gateway = "192.168.100.1"
+      }
+      ipv6 {
+        address = "fd00:100::57/64"
+        gateway = "fd00:100::1"
+      }
+    }
+
+    dns {
+      domain  = var.dns_domain
+      servers = var.dns_servers
+    }
+
+    user_account {
+      keys = [
+        trimspace(tls_private_key.karate_staging_key.public_key_openssh),
+        var.admin_public_key,
+      ]
+      password = random_password.karate_staging_password.result
+    }
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    template_file_id = proxmox_download_file.nixos_img["pve"].id
+    type             = "nixos"
+  }
+}
+
+resource "tls_private_key" "karate_staging_key" {
+  algorithm = "ED25519"
+}
+
+resource "random_password" "karate_staging_password" {
+  length           = 16
+  override_special = "_%@"
+  special          = true
+}

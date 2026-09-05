@@ -133,6 +133,20 @@ resource "opnsense_unbound_host_override" "karate_zitadel" {
   description = "Karate Zitadel identity stack (pve CT 401)"
 }
 
+resource "opnsense_unbound_host_override" "karate_staging_zitadel" {
+  hostname    = "karate-staging-zitadel"
+  domain      = "homelab.lan"
+  server      = "192.168.100.56"
+  description = "Karate STAGING identity stack (pve CT 402)"
+}
+
+resource "opnsense_unbound_host_override" "karate_staging" {
+  hostname    = "karate-staging"
+  domain      = "homelab.lan"
+  server      = "192.168.100.57"
+  description = "Karate STAGING app (pve CT 403)"
+}
+
 # --- Query forwarding ---
 
 # The "homelab" zone is served by the local dnsmasq instance (DHCP
