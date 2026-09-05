@@ -117,6 +117,22 @@ resource "opnsense_unbound_host_override" "auth" {
   server   = "192.168.100.13"
 }
 
+# IPs maintained in terraform/containers.tf (separate tofu root, no code link):
+# karate_container = CT 400, karate_zitadel_container = CT 401
+resource "opnsense_unbound_host_override" "karate" {
+  hostname    = "karate"
+  domain      = "homelab.lan"
+  server      = "192.168.100.54"
+  description = "Karate Tournament app (pve CT 400)"
+}
+
+resource "opnsense_unbound_host_override" "karate_zitadel" {
+  hostname    = "karate-zitadel"
+  domain      = "homelab.lan"
+  server      = "192.168.100.55"
+  description = "Karate Zitadel identity stack (pve CT 401)"
+}
+
 # --- Query forwarding ---
 
 # The "homelab" zone is served by the local dnsmasq instance (DHCP
