@@ -553,8 +553,11 @@ resource "proxmox_virtual_environment_container" "karate_zitadel_container" {
   }
 
   # Zitadel + Postgres + login app spike together; 2GB OOM-killed the CT.
+  # Swap cushions cgroup reclaim spikes so the CT thrashes instead of
+  # freezing userspace outright (login container leak incident 2026-09-04).
   memory {
     dedicated = 4096
+    swap      = 2048
   }
 
   features {
